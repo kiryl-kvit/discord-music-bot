@@ -37,6 +37,9 @@ var host = Host.CreateDefaultBuilder(args)
 
 var botSettings = host.Services.GetRequiredService<IOptions<BotSettings>>().Value;
 var discordClient = host.Services.GetRequiredService<DiscordSocketClient>();
+var interactionHandler = host.Services.GetRequiredService<InteractionHandler>();
+
+await interactionHandler.InitializeAsync();
 
 await discordClient.LoginAsync(TokenType.Bot, botSettings.BotToken);
 await discordClient.StartAsync();

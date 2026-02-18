@@ -1,4 +1,5 @@
 using Discord;
+using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
 using Microsoft.Extensions.Configuration;
@@ -29,6 +30,20 @@ public static class ServicesConfiguration
 
             return client;
         });
+
+        services.AddSingleton<InteractionService>(sp =>
+        {
+            var client = sp.GetRequiredService<DiscordSocketClient>();
+            var logger = sp.GetRequiredService<ILogger<InteractionService>>();
+            
+            var interactionService = new InteractionService(client);
+
+            interactionService.Log += Logging.CreateLogHandler(logger);
+
+            return interactionService;
+        });
+
+        services.AddSingleton<InteractionHandler>();
 
         return services;
     }

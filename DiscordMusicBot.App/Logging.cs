@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Discord;
 using Microsoft.Extensions.Logging;
 
@@ -6,7 +5,6 @@ namespace DiscordMusicBot.App;
 
 public static class Logging
 {
-    [SuppressMessage("Performance", "CA1873:Avoid potentially expensive logging")]
     public static Func<LogMessage, Task> CreateLogHandler(ILogger logger)
     {
         return logMessage =>
