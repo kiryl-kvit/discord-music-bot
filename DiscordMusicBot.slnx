@@ -1,3 +1,5 @@
 <Solution>
   <Project Path="DiscordMusicBot.App/DiscordMusicBot.App.csproj" />
+  <Project Path="DiscordMusicBot.Domain/DiscordMusicBot.Domain.csproj" />
+  <Project Path="DiscordMusicBot.DataAccess/DiscordMusicBot.DataAccess.csproj" />
 </Solution>

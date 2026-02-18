@@ -20,3 +20,4 @@ bld/
 *.sln.iml
 
 .env
+database.bd

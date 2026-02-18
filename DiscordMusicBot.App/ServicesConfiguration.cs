@@ -2,9 +2,15 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
+using DiscordMusicBot.DataAccess;
+using DiscordMusicBot.DataAccess.Options;
+using DiscordMusicBot.DataAccess.PlayQueue;
+using DiscordMusicBot.Domain.PlayQueue;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace DiscordMusicBot.App;
 
@@ -13,6 +19,28 @@ public static class ServicesConfiguration
     public static IServiceCollection ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<BotSettings>(configuration.GetSection(BotSettings.SectionName));
+        services.Configure<SqliteDatabaseOptions>(configuration.GetSection(SqliteDatabaseOptions.SectionName));
+
+        services.AddOptions<SqliteDatabaseOptions>()
+            .Bind(configuration.GetSection(SqliteDatabaseOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.DbFilePath), "SqliteDatabase:DbFilePath is required.")
+            .ValidateOnStart();
+        
+        services.AddOptions<BotSettings>()
+            .Bind(configuration.GetSection(BotSettings.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.BotToken), "BotSettings:BotToken is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.AppId), "BotSettings:AppId is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.PublicKey), "BotSettings:PublicKey is required.")
+            .ValidateOnStart();
+
+        services.AddDbContext<MusicBotDbContext>((sp, options) =>
+        {
+            var dbOptions = sp.GetRequiredService<IOptions<SqliteDatabaseOptions>>().Value;
+            options.UseSqlite($"Data Source={dbOptions.DbFilePath}");
+        });
+
+        services.AddHostedService<DbInitializerHostedService>();
+        services.AddScoped<IPlayQueueRepository, PlayQueueRepository>();
 
         var socketConfig = new DiscordSocketConfig
         {

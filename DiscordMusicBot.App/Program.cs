@@ -24,6 +24,7 @@ var host = Host.CreateDefaultBuilder(args)
             ["BotSettings:BotToken"] = Environment.GetEnvironmentVariable("BOT_TOKEN"),
             ["BotSettings:AppId"] = Environment.GetEnvironmentVariable("APP_ID"),
             ["BotSettings:PublicKey"] = Environment.GetEnvironmentVariable("PUBLIC_KEY"),
+            ["SqliteDatabase:DbFilePath"] = Environment.GetEnvironmentVariable("DB_FILE_PATH"),
         };
         config.AddInMemoryCollection(envValues.Where(kv => kv.Value is not null));
     })
