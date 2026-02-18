@@ -13,13 +13,13 @@ public class QueueModule(
     IUrlProcessorFactory urlProcessorFactory,
     ILogger<QueueModule> logger) : InteractionModuleBase
 {
-    [SlashCommand("add", "Enqueue item")]
+    [SlashCommand("add", "Enqueue an item")]
     public Task AddAsync(string url)
     {
         return AddAsyncCore(url);
     }
 
-    [SlashCommand("a", "Enqueue item")]
+    [SlashCommand("a", "Enqueue an item")]
     public Task Alias_A_AddAsync(string url)
     {
         return AddAsyncCore(url);
@@ -31,11 +31,12 @@ public class QueueModule(
         var userId = Context.User.Id;
 
         logger.LogInformation("User {UserId} is trying to enqueue {Url} in guild {GuildId}", userId, url, guildId);
+        await DeferAsync(ephemeral: true);
 
         if (!SupportedSources.IsSupported(url))
         {
-            await RespondAsync($"Unsupported source. ${SupportedSources.GetSupportedSourcesMessage()}",
-                ephemeral: true);
+            await ModifyOriginalResponseAsync(props => props.Content =
+                $"Unsupported source. {SupportedSources.GetSupportedSourcesMessage()}");
             logger.LogInformation("User {UserId} provided unsupported source {Url} in guild {GuildId}", userId, url,
                 guildId);
             return;
@@ -46,7 +47,8 @@ public class QueueModule(
 
         if (!musicItemsResult.IsSuccess)
         {
-            await RespondAsync($"Failed to process url: {musicItemsResult.ErrorMessage}", ephemeral: true);
+            await ModifyOriginalResponseAsync(props => props.Content =
+                $"Failed to process URL: {musicItemsResult.ErrorMessage}");
             return;
         }
 
@@ -57,11 +59,13 @@ public class QueueModule(
 
         if (!enqueueResult.IsSuccess)
         {
-            await RespondAsync($"Failed to enqueue item: {enqueueResult.ErrorMessage}", ephemeral: true);
+            await ModifyOriginalResponseAsync(props => props.Content =
+                $"Failed to enqueue the item: {enqueueResult.ErrorMessage}");
             return;
         }
 
         logger.LogInformation("User {UserId} successfully enqueued {Url} in guild {GuildId}", userId, url, guildId);
-        await RespondAsync($"Item added to the queue", ephemeral: true);
+        await ModifyOriginalResponseAsync(props => props.Content =
+            $"{(dtoArray.Length == 1 ? "Item" : $"{dtoArray.Length} items")} added to the queue");
     }
 }

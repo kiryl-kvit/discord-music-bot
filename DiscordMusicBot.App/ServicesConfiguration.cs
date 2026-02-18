@@ -3,6 +3,7 @@ using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
 using DiscordMusicBot.Core.Constants;
+using DiscordMusicBot.Core.MusicSource.Options;
 using DiscordMusicBot.DataAccess;
 using DiscordMusicBot.DataAccess.Options;
 using DiscordMusicBot.DataAccess.PlayQueue;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using YoutubeExplode;
 
 namespace DiscordMusicBot.App;
 
@@ -27,6 +29,7 @@ public static class ServicesConfiguration
 
         services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SupportedSources.YoutubeKey);
         services.AddScoped<IUrlProcessorFactory, UrlProcessorFactory>();
+        services.AddSingleton<YoutubeClient>();
 
         return services;
     }
@@ -35,13 +38,14 @@ public static class ServicesConfiguration
     {
         private IServiceCollection ConfigureBotOptions(IConfiguration configuration)
         {
-            services.Configure<BotSettings>(configuration.GetSection(BotSettings.SectionName));
-
-            services.AddOptions<BotSettings>()
-                .Bind(configuration.GetSection(BotSettings.SectionName))
+            services.BindOptions<BotSettings>(configuration, BotSettings.SectionName)
                 .Validate(o => !string.IsNullOrWhiteSpace(o.BotToken), "BotSettings:BotToken is required.")
                 .Validate(o => !string.IsNullOrWhiteSpace(o.AppId), "BotSettings:AppId is required.")
                 .Validate(o => !string.IsNullOrWhiteSpace(o.PublicKey), "BotSettings:PublicKey is required.")
+                .ValidateOnStart();
+
+            services.BindOptions<MusicSourcesOptions>(configuration, MusicSourcesOptions.SectionName)
+                .Validate(o => o.PlaylistLimit > 0, "MusicSources:PlaylistLimit must be greater than 0.")
                 .ValidateOnStart();
 
             return services;
@@ -49,10 +53,7 @@ public static class ServicesConfiguration
 
         private IServiceCollection ConfigureDatabase(IConfiguration configuration)
         {
-            services.Configure<SqliteDatabaseOptions>(configuration.GetSection(SqliteDatabaseOptions.SectionName));
-
-            services.AddOptions<SqliteDatabaseOptions>()
-                .Bind(configuration.GetSection(SqliteDatabaseOptions.SectionName))
+            services.BindOptions<SqliteDatabaseOptions>(configuration, SqliteDatabaseOptions.SectionName)
                 .Validate(o => !string.IsNullOrWhiteSpace(o.DbFilePath), "SqliteDatabase:DbFilePath is required.")
                 .ValidateOnStart();
 
@@ -102,6 +103,13 @@ public static class ServicesConfiguration
             services.AddSingleton<InteractionHandler>();
 
             return services;
+        }
+
+        private OptionsBuilder<TOptions> BindOptions<TOptions>(IConfiguration configuration, string sectionName)
+            where TOptions : class
+        {
+            return services.AddOptions<TOptions>()
+                .Bind(configuration.GetSection(sectionName));
         }
     }
 }

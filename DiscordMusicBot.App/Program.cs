@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using DiscordMusicBot.App;
 using DiscordMusicBot.App.Options;
+using DiscordMusicBot.Core.MusicSource.Options;
 using Microsoft.Extensions.Options;
 
 var envPath = Path.Combine(AppContext.BaseDirectory, ".env");
@@ -25,6 +26,7 @@ var host = Host.CreateDefaultBuilder(args)
             ["BotSettings:AppId"] = Environment.GetEnvironmentVariable("APP_ID"),
             ["BotSettings:PublicKey"] = Environment.GetEnvironmentVariable("PUBLIC_KEY"),
             ["SqliteDatabase:DbFilePath"] = Environment.GetEnvironmentVariable("DB_FILE_PATH"),
+            ["MusicSources:PlaylistLimit"] = Environment.GetEnvironmentVariable("PLAYLIST_LIMIT"),
         };
         config.AddInMemoryCollection(envValues.Where(kv => kv.Value is not null));
     })
