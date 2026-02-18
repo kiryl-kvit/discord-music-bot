@@ -7,11 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DiscordMusicBot.Core\DiscordMusicBot.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="UrlMetadata\" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
   </ItemGroup>
 
 </Project>

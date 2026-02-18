@@ -2,9 +2,12 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
+using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.DataAccess;
 using DiscordMusicBot.DataAccess.Options;
 using DiscordMusicBot.DataAccess.PlayQueue;
+using DiscordMusicBot.Core.MusicSource.Processors;
+using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +44,9 @@ public static class ServicesConfiguration
 
         services.AddHostedService<DbInitializerHostedService>();
         services.AddScoped<IPlayQueueRepository, PlayQueueRepository>();
+
+        services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SupportedSources.YoutubeKey);
+        services.AddScoped<IUrlProcessorFactory, UrlProcessorFactory>();
 
         var socketConfig = new DiscordSocketConfig
         {

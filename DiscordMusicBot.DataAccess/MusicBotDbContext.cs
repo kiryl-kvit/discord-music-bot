@@ -23,11 +23,7 @@ public sealed class MusicBotDbContext(DbContextOptions<MusicBotDbContext> option
             entity.Property(x => x.GuildId)
                 .IsRequired();
 
-            entity.Property(x => x.Type)
-                .HasConversion<string>()
-                .IsRequired();
-
-            entity.Property(x => x.Source)
+            entity.Property(x => x.Url)
                 .IsRequired()
                 .HasMaxLength(2048);
 

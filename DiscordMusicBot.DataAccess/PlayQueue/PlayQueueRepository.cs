@@ -1,11 +1,16 @@
+using DiscordMusicBot.Core;
 using DiscordMusicBot.Domain.PlayQueue;
+using DiscordMusicBot.Domain.PlayQueue.Dto;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.DataAccess.PlayQueue;
 
-public sealed class PlayQueueRepository(MusicBotDbContext dbContext) : IPlayQueueRepository
+public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<PlayQueueRepository> logger)
+    : IPlayQueueRepository
 {
-    public async Task<IReadOnlyList<PlayQueueItem>> GetAllAsync(ulong guildId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PlayQueueItem>> GetAllAsync(ulong guildId,
+        CancellationToken cancellationToken = default)
     {
         return await dbContext.PlayQueueItems
             .AsNoTracking()
@@ -14,39 +19,46 @@ public sealed class PlayQueueRepository(MusicBotDbContext dbContext) : IPlayQueu
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PlayQueueItem> EnqueueAsync(
-        ulong guildId,
-        PlayQueueItemType type,
-        string source,
+    public async Task<Result<IReadOnlyList<PlayQueueItem>>> EnqueueAsync(IEnumerable<EnqueueItemDto> dtos,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(source))
+        try
         {
-            throw new ArgumentException("Source is required.", nameof(source));
+            var dtoArray = dtos as EnqueueItemDto[] ?? dtos.ToArray();
+            if (dtoArray.Length == 0)
+            {
+                return Result<IReadOnlyList<PlayQueueItem>>.Success([]);
+            }
+
+            var guildId = dtoArray[0].GuildId;
+            var lastPosition = await dbContext.PlayQueueItems
+                .AsNoTracking()
+                .Where(x => x.GuildId == guildId)
+                .OrderByDescending(x => x.Position)
+                .Select(x => (long?)x.Position)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var nextPosition = lastPosition.GetValueOrDefault() + 1;
+            var items = new PlayQueueItem[dtoArray.Length];
+            for (var index = 0; index < dtoArray.Length; index++)
+            {
+                var dto = dtoArray[index];
+                var item = PlayQueueItem.Create(dto.GuildId, dto.UserId, dto.Url, dto.Title, nextPosition, dto.Author,
+                    dto.Duration);
+                items[index] = item;
+                nextPosition++;
+            }
+
+            dbContext.PlayQueueItems.AddRange(items);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            return Result<IReadOnlyList<PlayQueueItem>>.Success(items);
         }
-
-        var lastPosition = await dbContext.PlayQueueItems
-            .AsNoTracking()
-            .Where(x => x.GuildId == guildId)
-            .OrderByDescending(x => x.Position)
-            .Select(x => (long?)x.Position)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var nextPosition = lastPosition.GetValueOrDefault() + 1;
-
-        var item = new PlayQueueItem
+        catch (Exception ex)
         {
-            GuildId = guildId,
-            Type = type,
-            Source = source.Trim(),
-            Position = nextPosition,
-            EnqueuedAtUtc = DateTime.UtcNow,
-        };
-
-        dbContext.PlayQueueItems.Add(item);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return item;
+            logger.LogError(ex, ex.Message);
+            return Result<IReadOnlyList<PlayQueueItem>>.Failure(ex.Message);
+        }
     }
 
     public async Task<PlayQueueItem?> DequeueAsync(ulong guildId, CancellationToken cancellationToken = default)

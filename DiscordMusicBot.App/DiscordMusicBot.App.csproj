@@ -28,6 +28,7 @@
     <ItemGroup>
         <ProjectReference Include="..\DiscordMusicBot.Domain\DiscordMusicBot.Domain.csproj"/>
         <ProjectReference Include="..\DiscordMusicBot.DataAccess\DiscordMusicBot.DataAccess.csproj"/>
+        <ProjectReference Include="..\DiscordMusicBot.Core\DiscordMusicBot.Core.csproj"/>
     </ItemGroup>
 
 </Project>
