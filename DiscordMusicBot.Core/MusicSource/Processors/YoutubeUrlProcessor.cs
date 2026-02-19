@@ -71,26 +71,40 @@ public sealed class YoutubeUrlProcessor(
                     break;
                 }
 
-                try
+                if (TryConvertToMusicSource(video, out var source))
                 {
-                    sources.Add(ToMusicSource(video));
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Skipping unavailable YouTube playlist item {VideoId}.", video.Id);
+                    sources.Add(source);
                 }
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to resolve YouTube playlist {PlaylistId}.", playlistId);
+
             if (sources.Count == 0)
             {
                 return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch YouTube playlist metadata.");
             }
+
+            logger.LogInformation("Partial playlist fetch: retrieved {Count} items before failure", sources.Count);
         }
 
         return Result<IReadOnlyCollection<MusicSource>>.Success(sources);
+    }
+
+    private bool TryConvertToMusicSource(IVideo video, out MusicSource source)
+    {
+        try
+        {
+            source = ToMusicSource(video);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Skipping unavailable YouTube playlist item {VideoId}.", video.Id);
+            source = null!;
+            return false;
+        }
     }
 
     private static MusicSource ToMusicSource(IVideo video)
