@@ -129,7 +129,7 @@ public class QueueModule(
         var guildId = Context.Guild.Id;
 
         var items = await playQueueRepository.GetAllAsync(guildId);
-        var totalPages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)QueueEmbedBuilder.PageSize));
+        var totalPages = QueueEmbedBuilder.CalculateTotalPages(items.Count);
 
         var pageIndex = Math.Clamp(page - 1, 0, totalPages - 1);
 

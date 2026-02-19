@@ -17,8 +17,7 @@ public class VoiceModule(
 
         if (voiceChannel is null)
         {
-            await ModifyOriginalResponseAsync(props =>
-                props.Content = "You must be in a voice channel to use this command.");
+            await RespondAsync("You must be in a voice channel to use this command.", ephemeral: true);
             return;
         }
 

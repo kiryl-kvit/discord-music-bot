@@ -8,6 +8,11 @@ public static class QueueEmbedBuilder
 {
     public const int PageSize = 10;
 
+    public static int CalculateTotalPages(int itemCount)
+    {
+        return Math.Max(1, (int)Math.Ceiling(itemCount / (double)PageSize));
+    }
+
     public static Embed BuildQueueEmbed(IReadOnlyList<PlayQueueItem> items, PlayQueueItem? currentItem,
         int page, int totalPages)
     {
