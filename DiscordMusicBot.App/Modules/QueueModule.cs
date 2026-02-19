@@ -14,7 +14,6 @@ public class QueueModule(
     IPlayQueueRepository playQueueRepository,
     IUrlProcessorFactory urlProcessorFactory,
     QueuePlaybackService queuePlaybackService,
-    NowPlayingService nowPlayingService,
     ILogger<QueueModule> logger) : InteractionModuleBase
 {
     [SlashCommand("add", "Enqueue an item")]
@@ -75,11 +74,6 @@ public class QueueModule(
 
         await queuePlaybackService.StartAsync(guildId);
 
-        if (!nowPlayingService.IsActive(guildId))
-        {
-            await nowPlayingService.ActivateAsync(guildId, Context.Channel);
-        }
-
         await RespondAsync("Queue started.", ephemeral: true);
     }
 
@@ -114,18 +108,6 @@ public class QueueModule(
         await RespondAsync("Queue cleared.", ephemeral: true);
     }
 
-    [SlashCommand("now", "Show the Now Playing panel")]
-    public async Task NowAsync()
-    {
-        var guildId = Context.Guild.Id;
-
-        await DeferAsync(ephemeral: true);
-
-        await nowPlayingService.ActivateAsync(guildId, Context.Channel);
-
-        await ModifyOriginalResponseAsync(props => props.Content = "Now Playing panel activated.");
-    }
-
     [SlashCommand("skip", "Skip the current track")]
     public async Task SkipAsync()
     {
@@ -147,18 +129,18 @@ public class QueueModule(
         var guildId = Context.Guild.Id;
 
         var items = await playQueueRepository.GetAllAsync(guildId);
-        var totalPages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)NowPlayingEmbedBuilder.PageSize));
+        var totalPages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)QueueEmbedBuilder.PageSize));
 
         var pageIndex = Math.Clamp(page - 1, 0, totalPages - 1);
 
         var pageItems = items
-            .Skip(pageIndex * NowPlayingEmbedBuilder.PageSize)
-            .Take(NowPlayingEmbedBuilder.PageSize)
+            .Skip(pageIndex * QueueEmbedBuilder.PageSize)
+            .Take(QueueEmbedBuilder.PageSize)
             .ToList();
 
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
-        var embed = NowPlayingEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, pageIndex, totalPages);
-        var components = NowPlayingEmbedBuilder.BuildQueuePageControls(pageIndex, totalPages);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, pageIndex, totalPages);
+        var components = QueueEmbedBuilder.BuildQueuePageControls(pageIndex, totalPages);
 
         await RespondAsync(embed: embed, components: components);
     }

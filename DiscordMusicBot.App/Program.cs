@@ -40,16 +40,12 @@ var host = Host.CreateDefaultBuilder(args)
 
 var voiceConnectionService = host.Services.GetRequiredService<VoiceConnectionService>();
 var queuePlaybackService = host.Services.GetRequiredService<QueuePlaybackService>();
-var nowPlayingService = host.Services.GetRequiredService<NowPlayingService>();
 
 var discordClient = host.Services.GetRequiredService<DiscordSocketClient>();
 discordClient.UserVoiceStateUpdated += voiceConnectionService.HandleVoiceStateUpdated;
 
 voiceConnectionService.Connected += queuePlaybackService.OnVoiceConnected;
 voiceConnectionService.Disconnected += queuePlaybackService.OnVoiceDisconnected;
-
-queuePlaybackService.TrackStarted += (guildId, item) => nowPlayingService.OnTrackStartedAsync(guildId, item);
-queuePlaybackService.PlaybackStopped += guildId => nowPlayingService.OnPlaybackStoppedAsync(guildId);
 
 var interactionHandler = host.Services.GetRequiredService<InteractionHandler>();
 await interactionHandler.InitializeAsync();

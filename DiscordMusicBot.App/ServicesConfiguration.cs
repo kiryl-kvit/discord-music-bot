@@ -110,7 +110,6 @@ public static class ServicesConfiguration
 
             services.AddSingleton<VoiceConnectionService>();
             services.AddSingleton<QueuePlaybackService>();
-            services.AddSingleton<NowPlayingService>();
 
             return services;
         }

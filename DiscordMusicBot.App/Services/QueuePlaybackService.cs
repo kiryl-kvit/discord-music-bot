@@ -22,9 +22,6 @@ public sealed class QueuePlaybackService(
 
     private readonly ConcurrentDictionary<ulong, GuildPlaybackState> _states = new();
 
-    public event Func<ulong, PlayQueueItem, Task>? TrackStarted;
-    public event Func<ulong, Task>? PlaybackStopped;
-
     public bool IsPlaying(ulong guildId)
     {
         return _states.TryGetValue(guildId, out var state) && state.IsPlaying;
@@ -80,11 +77,6 @@ public sealed class QueuePlaybackService(
         logger.LogInformation("Stopping queue playback in guild {GuildId}", guildId);
         CancelAndReset(state);
         await ClearActivityAsync();
-
-        if (PlaybackStopped is not null)
-        {
-            await PlaybackStopped.Invoke(guildId);
-        }
     }
 
     public void Skip(ulong guildId)
@@ -156,11 +148,6 @@ public sealed class QueuePlaybackService(
                         CancelAndReset(state);
                         await ClearActivityAsync();
 
-                        if (PlaybackStopped is not null)
-                        {
-                            await PlaybackStopped.Invoke(guildId);
-                        }
-
                         break;
                     }
 
@@ -170,11 +157,6 @@ public sealed class QueuePlaybackService(
                 logger.LogInformation(
                     "Now playing: '{Title}' by {Author} ({Duration}) in guild {GuildId}",
                     item.Title, item.Author ?? "Unknown", item.Duration, guildId);
-
-                if (TrackStarted is not null)
-                {
-                    await TrackStarted.Invoke(guildId, item);
-                }
 
                 await SetActivityAsync(item.Title);
 
@@ -223,11 +205,6 @@ public sealed class QueuePlaybackService(
             CancelAndReset(state);
             state.CurrentItem = null;
             await ClearActivityAsync();
-
-            if (PlaybackStopped is not null)
-            {
-                await PlaybackStopped.Invoke(guildId);
-            }
         }
     }
 
