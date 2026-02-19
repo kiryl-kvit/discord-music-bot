@@ -7,6 +7,8 @@ namespace DiscordMusicBot.App.Services;
 public static class QueueEmbedBuilder
 {
     public const int PageSize = 10;
+    private const string UnknownAuthor = "Unknown";
+    private const string UnknownDuration = "??:??";
 
     public static int CalculateTotalPages(int itemCount)
     {
@@ -22,8 +24,7 @@ public static class QueueEmbedBuilder
 
         if (currentItem is not null)
         {
-            builder.WithDescription(
-                $"**Now playing:** {currentItem.Title} - {currentItem.Author ?? "Unknown"}");
+            builder.WithDescription($"**Now playing:** {FormatNowPlaying(currentItem)}");
         }
 
         if (items.Count == 0)
@@ -32,13 +33,7 @@ public static class QueueEmbedBuilder
         }
         else
         {
-            var lines = items.Select((item, index) =>
-            {
-                var position = page * PageSize + index + 1;
-                var duration = item.Duration is not null ? DateFormatter.FormatTime(item.Duration.Value) : "??:??";
-                return $"`{position}.` **{item.Title}** - {item.Author ?? "Unknown"} `[{duration}]`";
-            });
-
+            var lines = items.Select((item, index) => FormatQueueLine(item, page, index));
             builder.AddField("Up Next", string.Join('\n', lines));
         }
 
@@ -48,6 +43,20 @@ public static class QueueEmbedBuilder
         }
 
         return builder.Build();
+    }
+
+    private static string FormatNowPlaying(PlayQueueItem item)
+    {
+        return $"{item.Title} - {item.Author ?? UnknownAuthor}";
+    }
+
+    private static string FormatQueueLine(PlayQueueItem item, int page, int index)
+    {
+        var position = page * PageSize + index + 1;
+        var duration = item.Duration is not null
+            ? DateFormatter.FormatTime(item.Duration.Value)
+            : UnknownDuration;
+        return $"`{position}.` **{item.Title}** - {item.Author ?? UnknownAuthor} `[{duration}]`";
     }
 
     public static MessageComponent BuildQueuePageControls(int page, int totalPages)

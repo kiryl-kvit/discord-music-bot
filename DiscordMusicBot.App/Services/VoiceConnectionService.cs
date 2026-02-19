@@ -41,12 +41,25 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         logger.LogInformation("Connected to voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
 
+        await NotifyConnectedAsync(guildId);
+
+        return audioClient;
+    }
+
+    private async Task NotifyConnectedAsync(ulong guildId)
+    {
         if (Connected is not null)
         {
             await Connected.Invoke(guildId);
         }
+    }
 
-        return audioClient;
+    private async Task NotifyDisconnectedAsync(ulong guildId)
+    {
+        if (Disconnected is not null)
+        {
+            await Disconnected.Invoke(guildId);
+        }
     }
 
     public IAudioClient? GetConnection(ulong guildId)
@@ -102,10 +115,7 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
 
             _connections.TryRemove(guildId, out _);
 
-            if (Disconnected is not null)
-            {
-                await Disconnected.Invoke(guildId);
-            }
+            await NotifyDisconnectedAsync(guildId);
         }
     }
 
