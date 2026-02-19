@@ -1,6 +1,11 @@
 namespace DiscordMusicBot.Core.Formatters;
 
-public class DateFormatter
+public static class DateFormatter
 {
-    
+    public static string FormatTime(TimeSpan time)
+    {
+        return time.TotalHours >= 1
+            ? time.ToString(@"h\:mm\:ss")
+            : time.ToString(@"mm\:ss");
+    }
 }
