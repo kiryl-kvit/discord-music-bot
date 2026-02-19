@@ -57,8 +57,13 @@ public class QueueModule(
         }
 
         logger.LogInformation("User {UserId} successfully enqueued {Url} in guild {GuildId}", userId, url, guildId);
-        await ModifyOriginalResponseAsync(props => props.Content =
-            $"{(dtoArray.Length == 1 ? "Item" : $"{dtoArray.Length} items")} added to the queue");
+
+        var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(dtoArray);
+        await ModifyOriginalResponseAsync(props =>
+        {
+            props.Content = null;
+            props.Embed = embed;
+        });
     }
 
     [SlashCommand("start", "Start or resume queue playback")]
@@ -72,9 +77,17 @@ public class QueueModule(
             return;
         }
 
+        var nextItem = await playQueueRepository.PeekAsync(guildId);
+        if (nextItem is null)
+        {
+            await RespondAsync("Queue is empty. Add tracks with `/queue add` first.", ephemeral: true);
+            return;
+        }
+
         await queuePlaybackService.StartAsync(guildId);
 
-        await RespondAsync("Queue started.", ephemeral: true);
+        var embed = QueueEmbedBuilder.BuildNowPlayingEmbed(nextItem);
+        await RespondAsync(embed: embed);
     }
 
     [SlashCommand("stop", "Pause queue playback")]
@@ -119,8 +132,13 @@ public class QueueModule(
             return;
         }
 
+        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var nextItem = await playQueueRepository.PeekAsync(guildId, skip: 1);
+
         queuePlaybackService.Skip(guildId);
-        await RespondAsync("Skipped.", ephemeral: true);
+
+        var embed = QueueEmbedBuilder.BuildSkippedEmbed(currentItem, nextItem);
+        await RespondAsync(embed: embed);
     }
 
     [SlashCommand("list", "Show the queue")]
@@ -143,5 +161,22 @@ public class QueueModule(
         var components = QueueEmbedBuilder.BuildQueuePageControls(pageIndex, totalPages);
 
         await RespondAsync(embed: embed, components: components);
+    }
+
+    [SlashCommand("nowplaying", "Show the currently playing track")]
+    public async Task NowPlayingAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        if (currentItem is null)
+        {
+            await RespondAsync("Nothing is currently playing.", ephemeral: true);
+            return;
+        }
+
+        var elapsed = queuePlaybackService.GetElapsed(guildId);
+        var embed = QueueEmbedBuilder.BuildNowPlayingWithProgressEmbed(currentItem, elapsed);
+        await RespondAsync(embed: embed);
     }
 }

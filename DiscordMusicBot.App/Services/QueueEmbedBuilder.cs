@@ -1,6 +1,7 @@
 using Discord;
 using DiscordMusicBot.Core.Formatters;
 using DiscordMusicBot.Domain.PlayQueue;
+using DiscordMusicBot.Domain.PlayQueue.Dto;
 
 namespace DiscordMusicBot.App.Services;
 
@@ -67,5 +68,144 @@ public static class QueueEmbedBuilder
             .WithButton("Next", $"queue:page:{page + 1}", ButtonStyle.Secondary,
                 new Emoji("\u25B6\uFE0F"), disabled: page >= totalPages - 1)
             .Build();
+    }
+
+    public static Embed BuildAddedToQueueEmbed(EnqueueItemDto[] items)
+    {
+        var builder = new EmbedBuilder()
+            .WithColor(Color.Green);
+
+        if (items.Length == 1)
+        {
+            var item = items[0];
+            var duration = item.Duration is not null
+                ? DateFormatter.FormatTime(item.Duration.Value)
+                : UnknownDuration;
+
+            builder.WithTitle("Added to Queue");
+            builder.WithDescription($"**{item.Title}**");
+            builder.AddField("Artist", item.Author ?? UnknownAuthor, inline: true);
+            builder.AddField("Duration", duration, inline: true);
+        }
+        else
+        {
+            builder.WithTitle($"Added {items.Length} Tracks to Queue");
+
+            var totalDuration = items
+                .Where(x => x.Duration.HasValue)
+                .Sum(x => x.Duration!.Value.TotalSeconds);
+
+            var formattedTotal = totalDuration > 0
+                ? DateFormatter.FormatTime(TimeSpan.FromSeconds(totalDuration))
+                : UnknownDuration;
+
+            builder.AddField("Total Tracks", items.Length, inline: true);
+            builder.AddField("Total Duration", formattedTotal, inline: true);
+
+            var previewItems = items.Take(3).Select(item =>
+            {
+                var duration = item.Duration is not null
+                    ? DateFormatter.FormatTime(item.Duration.Value)
+                    : UnknownDuration;
+                return $"**{item.Title}** - {item.Author ?? UnknownAuthor} `[{duration}]`";
+            });
+
+            var preview = string.Join('\n', previewItems);
+            if (items.Length > 3)
+            {
+                preview += $"\n*...and {items.Length - 3} more*";
+            }
+
+            builder.AddField("Preview", preview);
+        }
+
+        return builder.Build();
+    }
+
+    public static Embed BuildNowPlayingEmbed(PlayQueueItem item)
+    {
+        var duration = item.Duration is not null
+            ? DateFormatter.FormatTime(item.Duration.Value)
+            : UnknownDuration;
+
+        var builder = new EmbedBuilder()
+            .WithTitle("Now Playing")
+            .WithDescription($"**{item.Title}**")
+            .WithColor(Color.Blue)
+            .AddField("Artist", item.Author ?? UnknownAuthor, inline: true)
+            .AddField("Duration", duration, inline: true);
+
+        return builder.Build();
+    }
+
+    public static Embed BuildSkippedEmbed(PlayQueueItem? skippedItem, PlayQueueItem? nextItem)
+    {
+        var builder = new EmbedBuilder()
+            .WithColor(Color.Orange);
+
+        if (skippedItem is not null)
+        {
+            builder.WithTitle("Skipped")
+                .WithDescription($"**{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor}");
+        }
+        else
+        {
+            builder.WithTitle("Skipped");
+        }
+
+        if (nextItem is not null)
+        {
+            var duration = nextItem.Duration is not null
+                ? DateFormatter.FormatTime(nextItem.Duration.Value)
+                : UnknownDuration;
+
+            builder.AddField("Up Next",
+                $"**{nextItem.Title}** - {nextItem.Author ?? UnknownAuthor} `[{duration}]`");
+        }
+        else
+        {
+            builder.AddField("Up Next", "Queue is empty");
+        }
+
+        return builder.Build();
+    }
+
+    public static Embed BuildNowPlayingWithProgressEmbed(PlayQueueItem item, TimeSpan? elapsed)
+    {
+        var builder = new EmbedBuilder()
+            .WithTitle("Now Playing")
+            .WithDescription($"**{item.Title}**")
+            .WithColor(Color.Blue)
+            .AddField("Artist", item.Author ?? UnknownAuthor, inline: true);
+
+        if (item.Duration is not null)
+        {
+            var duration = DateFormatter.FormatTime(item.Duration.Value);
+            builder.AddField("Duration", duration, inline: true);
+
+            if (elapsed is not null)
+            {
+                var elapsedFormatted = DateFormatter.FormatTime(elapsed.Value);
+                var progressBar = CreateProgressBar(elapsed.Value, item.Duration.Value);
+
+                builder.AddField("Progress", $"{elapsedFormatted} / {duration}\n{progressBar}");
+            }
+        }
+        else
+        {
+            builder.AddField("Duration", UnknownDuration, inline: true);
+        }
+
+        return builder.Build();
+    }
+
+    private static string CreateProgressBar(TimeSpan elapsed, TimeSpan duration)
+    {
+        const int barLength = 20;
+        var progress = Math.Clamp(elapsed.TotalSeconds / duration.TotalSeconds, 0.0, 1.0);
+        var filledLength = (int)(barLength * progress);
+
+        var bar = new string('\u2588', filledLength) + new string('\u2591', barLength - filledLength);
+        return $"`{bar}`";
     }
 }
