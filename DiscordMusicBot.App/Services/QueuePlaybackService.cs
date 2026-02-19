@@ -222,6 +222,50 @@ public sealed class QueuePlaybackService(
         }
     }
 
+    private async Task AdvanceSilentlyAsync(TimeSpan startFrom, TimeSpan duration, CancellationToken cancellationToken)
+    {
+        var remaining = duration - startFrom;
+        if (remaining > TimeSpan.Zero)
+        {
+            await Task.Delay(remaining, cancellationToken);
+        }
+    }
+
+    private async Task<TimeSpan> WaitForVoiceOrAdvanceSilentlyAsync(PlayQueueItem item, GuildPlaybackState state,
+        TimeSpan startFrom, CancellationToken cancellationToken)
+    {
+        state.TrackStartedAtUtc = DateTime.UtcNow;
+
+        var remaining = item.Duration!.Value - startFrom;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return item.Duration.Value;
+        }
+
+        var voiceTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        state.VoiceConnectedTcs = voiceTcs;
+
+        using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var delayTask = Task.Delay(remaining, delayCts.Token);
+
+        var completed = await Task.WhenAny(delayTask, voiceTcs.Task);
+
+        if (completed == delayTask)
+        {
+            await delayTask;
+            state.VoiceConnectedTcs = null;
+            return item.Duration.Value;
+        }
+
+        await delayCts.CancelAsync();
+
+        state.VoiceConnectedTcs = null;
+        var elapsed = state.ElapsedBeforePause + (DateTime.UtcNow - (state.TrackStartedAtUtc ?? DateTime.UtcNow));
+        state.TrackStartedAtUtc = null;
+
+        return elapsed;
+    }
+
     private async Task PlayTrackAsync(ulong guildId, PlayQueueItem item, GuildPlaybackState state,
         TimeSpan startFrom, CancellationToken cancellationToken)
     {
@@ -240,34 +284,12 @@ public sealed class QueuePlaybackService(
                 "Not in voice channel for guild {GuildId}. Advancing silently for '{Title}'.",
                 guildId, item.Title);
 
-            state.TrackStartedAtUtc = DateTime.UtcNow;
+            startFrom = await WaitForVoiceOrAdvanceSilentlyAsync(item, state, startFrom, cancellationToken);
 
-            var remaining = item.Duration!.Value - startFrom;
-            if (remaining <= TimeSpan.Zero)
+            if (startFrom >= item.Duration!.Value)
             {
                 return;
             }
-
-            var voiceTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            state.VoiceConnectedTcs = voiceTcs;
-
-            using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var delayTask = Task.Delay(remaining, delayCts.Token);
-
-            var completed = await Task.WhenAny(delayTask, voiceTcs.Task);
-
-            if (completed == delayTask)
-            {
-                await delayTask; // Propagate cancellation if cancelled.
-                state.VoiceConnectedTcs = null;
-                return;
-            }
-
-            await delayCts.CancelAsync();
-
-            state.VoiceConnectedTcs = null;
-            startFrom = state.ElapsedBeforePause + (DateTime.UtcNow - (state.TrackStartedAtUtc ?? DateTime.UtcNow));
-            state.TrackStartedAtUtc = null;
 
             logger.LogInformation(
                 "Voice connected mid-track in guild {GuildId}. Resuming '{Title}' from {Elapsed}.",
@@ -290,13 +312,7 @@ public sealed class QueuePlaybackService(
                 item.Url, guildId);
 
             state.TrackStartedAtUtc = DateTime.UtcNow;
-
-            var remaining = item.Duration!.Value - startFrom;
-            if (remaining > TimeSpan.Zero)
-            {
-                await Task.Delay(remaining, cancellationToken);
-            }
-
+            await AdvanceSilentlyAsync(startFrom, item.Duration!.Value, cancellationToken);
             return;
         }
 
@@ -327,13 +343,7 @@ public sealed class QueuePlaybackService(
                     item.Title, guildId, streamResult.ErrorMessage);
 
                 state.TrackStartedAtUtc = DateTime.UtcNow;
-
-                var remaining = item.Duration!.Value - startFrom;
-                if (remaining > TimeSpan.Zero)
-                {
-                    await Task.Delay(remaining, cancellationToken);
-                }
-
+                await AdvanceSilentlyAsync(startFrom, item.Duration!.Value, cancellationToken);
                 return;
             }
 
@@ -469,16 +479,16 @@ public sealed class QueuePlaybackService(
             state.TrackStartedAtUtc = null;
         }
 
-        var prefetch = state.Prefetch;
-        if (prefetch is not null)
+        if (state.Prefetch is not null)
         {
+            var prefetch = state.Prefetch;
             state.Prefetch = null;
             _ = prefetch.DisposeAsync();
         }
 
-        var discordPcmStream = state.DiscordPcmStream;
-        if (discordPcmStream is not null)
+        if (state.DiscordPcmStream is not null)
         {
+            var discordPcmStream = state.DiscordPcmStream;
             state.DiscordPcmStream = null;
             state.DiscordPcmStreamOwner = null;
             _ = DisposeDiscordPcmStreamAsync(discordPcmStream);
@@ -487,29 +497,27 @@ public sealed class QueuePlaybackService(
         state.VoiceConnectedTcs?.TrySetCanceled();
         state.VoiceConnectedTcs = null;
 
+        SafeCancelAndDispose(ref state.SkipCts);
+        SafeCancelAndDispose(ref state.Cts);
+    }
+
+    private static void SafeCancelAndDispose(ref CancellationTokenSource? cts)
+    {
+        if (cts is null)
+        {
+            return;
+        }
+
         try
         {
-            state.SkipCts?.Cancel();
-            state.SkipCts?.Dispose();
+            cts.Cancel();
+            cts.Dispose();
         }
         catch (ObjectDisposedException)
         {
-            //
         }
 
-        state.SkipCts = null;
-
-        try
-        {
-            state.Cts?.Cancel();
-            state.Cts?.Dispose();
-        }
-        catch (ObjectDisposedException)
-        {
-            //
-        }
-
-        state.Cts = null;
+        cts = null;
     }
 
     private static async Task DisposeDiscordPcmStreamAsync(AudioOutStream stream)
