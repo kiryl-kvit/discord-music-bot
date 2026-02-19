@@ -2,7 +2,6 @@ using Discord;
 using Discord.Interactions;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
-using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
 using DiscordMusicBot.Domain.PlayQueue.Dto;
@@ -26,73 +25,40 @@ public class QueueModule(
         logger.LogInformation("User {UserId} is trying to enqueue {Url} in guild {GuildId}", userId, url, guildId);
         await DeferAsync(ephemeral: true);
 
-        if (!ValidateUrl(url))
+        if (!SupportedSources.IsSupported(url))
         {
+            await ModifyOriginalResponseAsync(props => props.Content =
+                $"Unsupported source. {SupportedSources.GetSupportedSourcesMessage()}");
+            logger.LogInformation("User {UserId} provided unsupported source {Url} in guild {GuildId}", userId, url,
+                guildId);
             return;
         }
 
-        var musicItems = await GetMusicItemsAsync(url);
-        if (musicItems is null)
+        var urlProcessor = urlProcessorFactory.GetProcessor(url);
+        var musicItemsResult = await urlProcessor.GetMusicItemsAsync(url);
+
+        if (!musicItemsResult.IsSuccess)
         {
+            await ModifyOriginalResponseAsync(props => props.Content =
+                $"Failed to process URL: {musicItemsResult.ErrorMessage}");
             return;
         }
 
-        var enqueueSuccess = await EnqueueItemsAsync(guildId, userId, musicItems);
-        if (!enqueueSuccess)
+        var dtoArray = musicItemsResult.Value!
+            .Select(x => new EnqueueItemDto(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
+
+        var enqueueResult = await playQueueRepository.EnqueueAsync(dtoArray);
+
+        if (!enqueueResult.IsSuccess)
         {
+            await ModifyOriginalResponseAsync(props => props.Content =
+                $"Failed to enqueue the item: {enqueueResult.ErrorMessage}");
             return;
         }
 
         logger.LogInformation("User {UserId} successfully enqueued {Url} in guild {GuildId}", userId, url, guildId);
         await ModifyOriginalResponseAsync(props => props.Content =
-            $"{(musicItems.Count == 1 ? "Item" : $"{musicItems.Count} items")} added to the queue");
-    }
-
-    private bool ValidateUrl(string url)
-    {
-        if (SupportedSources.IsSupported(url))
-        {
-            return true;
-        }
-
-        _ = ModifyOriginalResponseAsync(props => props.Content =
-            $"Unsupported source. {SupportedSources.GetSupportedSourcesMessage()}");
-        logger.LogInformation("User {UserId} provided unsupported source {Url} in guild {GuildId}",
-            Context.User.Id, url, Context.Guild.Id);
-        return false;
-    }
-
-    private async Task<IReadOnlyCollection<MusicSource>?> GetMusicItemsAsync(string url)
-    {
-        var urlProcessor = urlProcessorFactory.GetProcessor(url);
-        var musicItemsResult = await urlProcessor.GetMusicItemsAsync(url);
-
-        if (musicItemsResult.IsSuccess)
-        {
-            return musicItemsResult.Value!;
-        }
-
-        await ModifyOriginalResponseAsync(props => props.Content =
-            $"Failed to process URL: {musicItemsResult.ErrorMessage}");
-        return null;
-    }
-
-    private async Task<bool> EnqueueItemsAsync(ulong guildId, ulong userId, IReadOnlyCollection<MusicSource> items)
-    {
-        var dtoArray = items
-            .Select(x => new EnqueueItemDto(guildId, userId, x.Url, x.Title, x.Author, x.Duration))
-            .ToArray();
-
-        var enqueueResult = await playQueueRepository.EnqueueAsync(dtoArray);
-
-        if (enqueueResult.IsSuccess)
-        {
-            return true;
-        }
-
-        await ModifyOriginalResponseAsync(props => props.Content =
-            $"Failed to enqueue the item: {enqueueResult.ErrorMessage}");
-        return false;
+            $"{(dtoArray.Length == 1 ? "Item" : $"{dtoArray.Length} items")} added to the queue");
     }
 
     [SlashCommand("start", "Start or resume queue playback")]
