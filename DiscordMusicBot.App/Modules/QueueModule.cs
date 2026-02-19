@@ -67,12 +67,12 @@ public class QueueModule(
 
         if (queuePlaybackService.IsPlaying(guildId))
         {
-            await ModifyOriginalResponseAsync(props => props.Content = "Queue is already playing.");
+            await RespondAsync("Queue is already playing.", ephemeral: true);
             return;
         }
 
         await queuePlaybackService.StartAsync(guildId);
-        await ModifyOriginalResponseAsync(props => props.Content = "Queue started.");
+        await RespondAsync("Queue started.", ephemeral: true);
     }
 
     [SlashCommand("stop", "Pause queue playback")]
@@ -82,12 +82,12 @@ public class QueueModule(
 
         if (!queuePlaybackService.IsPlaying(guildId))
         {
-            await ModifyOriginalResponseAsync(props => props.Content = "Queue is not playing.");
+            await RespondAsync("Queue is not playing.", ephemeral: true);
             return;
         }
 
         await queuePlaybackService.StopAsync(guildId);
-        await ModifyOriginalResponseAsync(props => props.Content = "Queue paused.");
+        await RespondAsync("Queue paused.", ephemeral: true);
     }
 
     [SlashCommand("clear", "Clear all items from the queue")]
@@ -103,6 +103,6 @@ public class QueueModule(
         await playQueueRepository.ClearAsync(guildId);
 
         logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
-        await ModifyOriginalResponseAsync(props => props.Content = "Queue cleared.");
+        await RespondAsync("Queue cleared.", ephemeral: true);
     }
 }

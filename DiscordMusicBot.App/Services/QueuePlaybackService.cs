@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
+using Discord.Audio;
 using DiscordMusicBot.App.Services.Models;
+using DiscordMusicBot.Core.MusicSource.AudioStreaming;
+using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -8,8 +11,12 @@ namespace DiscordMusicBot.App.Services;
 
 public sealed class QueuePlaybackService(
     IServiceScopeFactory scopeFactory,
+    IAudioStreamProviderFactory audioStreamProviderFactory,
+    VoiceConnectionService voiceConnectionService,
     ILogger<QueuePlaybackService> logger)
 {
+    private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
+
     private readonly ConcurrentDictionary<ulong, GuildPlaybackState> _states = new();
 
     public bool IsPlaying(ulong guildId)
@@ -60,9 +67,7 @@ public sealed class QueuePlaybackService(
     {
         if (IsPlaying(guildId))
         {
-            logger.LogInformation(
-                "Voice connected in guild {GuildId} while queue is playing. Audio output will start when implemented.",
-                guildId);
+            logger.LogInformation("Voice connected in guild {GuildId} while queue is playing.", guildId);
         }
 
         return Task.CompletedTask;
@@ -115,7 +120,7 @@ public sealed class QueuePlaybackService(
                     continue;
                 }
 
-                await Task.Delay(item.Duration.Value, cancellationToken);
+                await PlayTrackAsync(guildId, item, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -127,6 +132,77 @@ public sealed class QueuePlaybackService(
             logger.LogError(ex, "Unexpected error in queue advancement loop for guild {GuildId}", guildId);
             CancelAndReset(state);
         }
+    }
+
+    private async Task PlayTrackAsync(ulong guildId, PlayQueueItem item, CancellationToken cancellationToken)
+    {
+        var audioClient = voiceConnectionService.GetConnection(guildId);
+
+        if (audioClient is null)
+        {
+            logger.LogInformation(
+                "Not in voice channel for guild {GuildId}. Advancing silently for '{Title}'.",
+                guildId, item.Title);
+
+            await Task.Delay(item.Duration!.Value, cancellationToken);
+            return;
+        }
+
+        await StreamToVoiceAsync(guildId, item, audioClient, cancellationToken);
+    }
+
+    private async Task StreamToVoiceAsync(ulong guildId, PlayQueueItem item, IAudioClient audioClient,
+        CancellationToken cancellationToken)
+    {
+        IAudioStreamProvider provider;
+        try
+        {
+            provider = audioStreamProviderFactory.GetProvider(item.Url);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex,
+                "No audio stream provider for '{Url}' in guild {GuildId}. Advancing silently.",
+                item.Url, guildId);
+
+            await Task.Delay(item.Duration!.Value, cancellationToken);
+            return;
+        }
+
+        var streamResult = await provider.GetAudioStreamAsync(item.Url, cancellationToken);
+
+        if (!streamResult.IsSuccess)
+        {
+            logger.LogWarning(
+                "Failed to get audio stream for '{Title}' in guild {GuildId}: {Error}. Advancing silently.",
+                item.Title, guildId, streamResult.ErrorMessage);
+
+            await Task.Delay(item.Duration!.Value, cancellationToken);
+            return;
+        }
+
+        await using var pcmAudioStream = streamResult.Value!;
+
+        logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId}", item.Title, guildId);
+
+        await using var discordStream = audioClient.CreatePCMStream(AudioApplication.Music);
+
+        try
+        {
+            var buffer = new byte[PcmBufferSize];
+            int bytesRead;
+
+            while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+            }
+        }
+        finally
+        {
+            await discordStream.FlushAsync(cancellationToken);
+        }
+
+        logger.LogInformation("Finished streaming '{Title}' in guild {GuildId}", item.Title, guildId);
     }
 
     private static void CancelAndReset(GuildPlaybackState state)

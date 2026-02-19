@@ -8,6 +8,8 @@ using DiscordMusicBot.Core.MusicSource.Options;
 using DiscordMusicBot.DataAccess;
 using DiscordMusicBot.DataAccess.Options;
 using DiscordMusicBot.DataAccess.PlayQueue;
+using DiscordMusicBot.Core.MusicSource.AudioStreaming;
+using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Processors;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
@@ -31,6 +33,9 @@ public static class ServicesConfiguration
         services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SupportedSources.YoutubeKey);
         services.AddScoped<IUrlProcessorFactory, UrlProcessorFactory>();
         services.AddSingleton<YoutubeClient>();
+
+        services.AddKeyedSingleton<IAudioStreamProvider, YoutubeAudioStreamProvider>(SupportedSources.YoutubeKey);
+        services.AddSingleton<IAudioStreamProviderFactory, AudioStreamProviderFactory>();
 
         return services;
     }
