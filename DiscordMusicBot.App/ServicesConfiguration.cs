@@ -2,6 +2,7 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
+using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Options;
 using DiscordMusicBot.DataAccess;
@@ -101,6 +102,9 @@ public static class ServicesConfiguration
             });
 
             services.AddSingleton<InteractionHandler>();
+
+            services.AddSingleton<VoiceConnectionService>();
+            services.AddSingleton<QueuePlaybackService>();
 
             return services;
         }

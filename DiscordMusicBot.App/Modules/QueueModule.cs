@@ -1,4 +1,5 @@
 using Discord.Interactions;
+using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
@@ -11,21 +12,11 @@ namespace DiscordMusicBot.App.Modules;
 public class QueueModule(
     IPlayQueueRepository playQueueRepository,
     IUrlProcessorFactory urlProcessorFactory,
+    QueuePlaybackService queuePlaybackService,
     ILogger<QueueModule> logger) : InteractionModuleBase
 {
     [SlashCommand("add", "Enqueue an item")]
-    public Task AddAsync(string url)
-    {
-        return AddAsyncCore(url);
-    }
-
-    [SlashCommand("a", "Enqueue an item")]
-    public Task Alias_A_AddAsync(string url)
-    {
-        return AddAsyncCore(url);
-    }
-
-    private async Task AddAsyncCore(string url)
+    public async Task AddAsync(string url)
     {
         var guildId = Context.Guild.Id;
         var userId = Context.User.Id;
@@ -67,5 +58,51 @@ public class QueueModule(
         logger.LogInformation("User {UserId} successfully enqueued {Url} in guild {GuildId}", userId, url, guildId);
         await ModifyOriginalResponseAsync(props => props.Content =
             $"{(dtoArray.Length == 1 ? "Item" : $"{dtoArray.Length} items")} added to the queue");
+    }
+
+    [SlashCommand("start", "Start or resume queue playback")]
+    public async Task StartAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        if (queuePlaybackService.IsPlaying(guildId))
+        {
+            await ModifyOriginalResponseAsync(props => props.Content = "Queue is already playing.");
+            return;
+        }
+
+        await queuePlaybackService.StartAsync(guildId);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue started.");
+    }
+
+    [SlashCommand("stop", "Pause queue playback")]
+    public async Task StopAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        if (!queuePlaybackService.IsPlaying(guildId))
+        {
+            await ModifyOriginalResponseAsync(props => props.Content = "Queue is not playing.");
+            return;
+        }
+
+        await queuePlaybackService.StopAsync(guildId);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue paused.");
+    }
+
+    [SlashCommand("clear", "Clear all items from the queue")]
+    public async Task ClearAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        if (queuePlaybackService.IsPlaying(guildId))
+        {
+            await queuePlaybackService.StopAsync(guildId);
+        }
+
+        await playQueueRepository.ClearAsync(guildId);
+
+        logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue cleared.");
     }
 }
