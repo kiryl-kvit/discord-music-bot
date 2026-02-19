@@ -2,10 +2,10 @@ namespace DiscordMusicBot.Core.Formatters;
 
 public static class DateFormatter
 {
-    public static string FormatTime(TimeSpan time)
+    public static string FormatTime(TimeSpan duration)
     {
-        return time.TotalHours >= 1
-            ? time.ToString(@"h\:mm\:ss")
-            : time.ToString(@"mm\:ss");
+        return duration.TotalHours >= 1
+            ? duration.ToString(@"h\:mm\:ss")
+            : duration.ToString(@"m\:ss");
     }
 }

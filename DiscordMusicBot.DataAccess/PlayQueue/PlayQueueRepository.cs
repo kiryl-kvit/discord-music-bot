@@ -56,7 +56,7 @@ public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<Pla
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, ex.Message);
+            logger.LogError(ex, "Failed to enqueue items");
             return Result<IReadOnlyList<PlayQueueItem>>.Failure(ex.Message);
         }
     }
