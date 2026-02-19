@@ -132,26 +132,14 @@ public sealed class QueuePlaybackService(
         {
             while (state.IsPlaying && !cancellationToken.IsCancellationRequested)
             {
-                var item = state.CurrentItem;
-
+                var item = await LoadCurrentItemAsync(guildId, state, cancellationToken);
                 if (item is null)
                 {
-                    using (var scope = scopeFactory.CreateScope())
-                    {
-                        var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
-                        item = await repository.PeekAsync(guildId, cancellationToken: cancellationToken);
-                    }
+                    logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
+                    CancelAndReset(state);
+                    await ClearActivityAsync();
 
-                    if (item is null)
-                    {
-                        logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
-                        CancelAndReset(state);
-                        await ClearActivityAsync();
-
-                        break;
-                    }
-
-                    state.CurrentItem = item;
+                    break;
                 }
 
                 logger.LogInformation(
@@ -206,6 +194,23 @@ public sealed class QueuePlaybackService(
             state.CurrentItem = null;
             await ClearActivityAsync();
         }
+    }
+
+    private async Task<PlayQueueItem?> LoadCurrentItemAsync(ulong guildId, GuildPlaybackState state,
+        CancellationToken cancellationToken)
+    {
+        if (state.CurrentItem is not null)
+        {
+            return state.CurrentItem;
+        }
+
+        using var scope = scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
+
+        var item = await repository.PeekAsync(guildId, cancellationToken: cancellationToken);
+        state.CurrentItem = item;
+
+        return item;
     }
 
     private async Task RemoveItemAsync(long itemId, CancellationToken cancellationToken)
