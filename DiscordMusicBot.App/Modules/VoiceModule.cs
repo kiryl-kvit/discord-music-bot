@@ -17,7 +17,7 @@ public class VoiceModule(
 
         if (voiceChannel is null)
         {
-            await RespondAsync("You must be in a voice channel to use this command.", ephemeral: true);
+            await RespondAsync("You must be in a voice channel first. Join a voice channel and try again.", ephemeral: true);
             return;
         }
 
@@ -34,7 +34,7 @@ public class VoiceModule(
             logger.LogError(ex, "Failed to join voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
                 voiceChannel.Name, voiceChannel.Id, Context.Guild.Id);
             await ModifyOriginalResponseAsync(props =>
-                props.Content = "Failed to join the voice channel. Please check bot permissions and try again.");
+                props.Content = "Failed to join the voice channel. Please check that the bot has permission to join and speak in the channel.");
         }
     }
 }
