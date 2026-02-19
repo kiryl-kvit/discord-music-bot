@@ -162,21 +162,4 @@ public class QueueModule(
 
         await RespondAsync(embed: embed, components: components);
     }
-
-    [SlashCommand("nowplaying", "Show the currently playing track")]
-    public async Task NowPlayingAsync()
-    {
-        var guildId = Context.Guild.Id;
-
-        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
-        if (currentItem is null)
-        {
-            await RespondAsync("Nothing is currently playing.", ephemeral: true);
-            return;
-        }
-
-        var elapsed = queuePlaybackService.GetElapsed(guildId);
-        var embed = QueueEmbedBuilder.BuildNowPlayingWithProgressEmbed(currentItem, elapsed);
-        await RespondAsync(embed: embed);
-    }
 }

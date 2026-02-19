@@ -169,43 +169,4 @@ public static class QueueEmbedBuilder
 
         return builder.Build();
     }
-
-    public static Embed BuildNowPlayingWithProgressEmbed(PlayQueueItem item, TimeSpan? elapsed)
-    {
-        var builder = new EmbedBuilder()
-            .WithTitle("Now Playing")
-            .WithDescription($"**{item.Title}**")
-            .WithColor(Color.Blue)
-            .AddField("Artist", item.Author ?? UnknownAuthor, inline: true);
-
-        if (item.Duration is not null)
-        {
-            var duration = DateFormatter.FormatTime(item.Duration.Value);
-            builder.AddField("Duration", duration, inline: true);
-
-            if (elapsed is not null)
-            {
-                var elapsedFormatted = DateFormatter.FormatTime(elapsed.Value);
-                var progressBar = CreateProgressBar(elapsed.Value, item.Duration.Value);
-
-                builder.AddField("Progress", $"{elapsedFormatted} / {duration}\n{progressBar}");
-            }
-        }
-        else
-        {
-            builder.AddField("Duration", UnknownDuration, inline: true);
-        }
-
-        return builder.Build();
-    }
-
-    private static string CreateProgressBar(TimeSpan elapsed, TimeSpan duration)
-    {
-        const int barLength = 20;
-        var progress = Math.Clamp(elapsed.TotalSeconds / duration.TotalSeconds, 0.0, 1.0);
-        var filledLength = (int)(barLength * progress);
-
-        var bar = new string('\u2588', filledLength) + new string('\u2591', barLength - filledLength);
-        return $"`{bar}`";
-    }
 }
