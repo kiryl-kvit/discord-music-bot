@@ -1,3 +1,4 @@
+using Discord.Audio;
 using DiscordMusicBot.Domain.PlayQueue;
 
 namespace DiscordMusicBot.App.Services.Models;
@@ -11,4 +12,7 @@ public sealed class GuildPlaybackState
     public CancellationTokenSource? Cts;
     public CancellationTokenSource? SkipCts;
     public TaskCompletionSource? VoiceConnectedTcs;
+    public PrefetchedTrack? Prefetch;
+    public AudioOutStream? DiscordPcmStream;
+    public IAudioClient? DiscordPcmStreamOwner;
 }

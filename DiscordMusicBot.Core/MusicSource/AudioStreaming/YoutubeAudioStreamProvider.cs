@@ -51,8 +51,12 @@ public sealed class YoutubeAudioStreamProvider(
                 url,
                 async () =>
                 {
+                    // Complete the reader so the FFmpeg pipe-writer side gets a broken pipe
+                    // and terminates. Do NOT await ffmpegTask here — FFmpeg may take time to
+                    // die after the pipe breaks, and blocking disposal would stall the
+                    // playback advancement loop on skip.
                     await pipe.Reader.CompleteAsync();
-                    await ffmpegTask;
+                    _ = ffmpegTask.ContinueWith(_ => { }, TaskScheduler.Default);
                 });
 
             return Result<PcmAudioStream>.Success(pcmAudioStream);

@@ -10,7 +10,7 @@ public interface IPlayQueueRepository
     Task<Result<IReadOnlyList<PlayQueueItem>>> EnqueueAsync(IEnumerable<EnqueueItemDto> dtos,
         CancellationToken cancellationToken = default);
 
-    Task<PlayQueueItem?> PeekAsync(ulong guildId, CancellationToken cancellationToken = default);
+    Task<PlayQueueItem?> PeekAsync(ulong guildId, int skip = 0, CancellationToken cancellationToken = default);
 
     Task<PlayQueueItem?> DequeueAsync(ulong guildId, CancellationToken cancellationToken = default);
 

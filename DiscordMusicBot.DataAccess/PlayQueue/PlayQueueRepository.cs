@@ -61,12 +61,14 @@ public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<Pla
         }
     }
 
-    public async Task<PlayQueueItem?> PeekAsync(ulong guildId, CancellationToken cancellationToken = default)
+    public async Task<PlayQueueItem?> PeekAsync(ulong guildId, int skip = 0,
+        CancellationToken cancellationToken = default)
     {
         return await dbContext.PlayQueueItems
             .AsNoTracking()
             .Where(x => x.GuildId == guildId)
             .OrderBy(x => x.Position)
+            .Skip(skip)
             .FirstOrDefaultAsync(cancellationToken);
     }
 

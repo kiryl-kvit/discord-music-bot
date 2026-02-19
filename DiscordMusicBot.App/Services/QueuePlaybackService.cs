@@ -3,6 +3,7 @@ using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Services.Models;
+using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.DependencyInjection;
@@ -146,7 +147,7 @@ public sealed class QueuePlaybackService(
                     using (var scope = scopeFactory.CreateScope())
                     {
                         var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
-                        item = await repository.PeekAsync(guildId, cancellationToken);
+                        item = await repository.PeekAsync(guildId, cancellationToken: cancellationToken);
                     }
 
                     if (item is null)
@@ -322,49 +323,163 @@ public sealed class QueuePlaybackService(
             return;
         }
 
-        var streamResult = await provider.GetAudioStreamAsync(item.Url, startFrom, cancellationToken);
+        PcmAudioStream pcmAudioStream;
 
-        if (!streamResult.IsSuccess)
+        var prefetch = state.Prefetch;
+        if (prefetch is not null && prefetch.ItemId == item.Id && startFrom == TimeSpan.Zero)
         {
-            logger.LogWarning(
-                "Failed to get audio stream for '{Title}' in guild {GuildId}: {Error}. Advancing silently.",
-                item.Title, guildId, streamResult.ErrorMessage);
+            logger.LogInformation("Using prefetched audio stream for '{Title}' in guild {GuildId}",
+                item.Title, guildId);
+            pcmAudioStream = prefetch.Stream;
+            state.Prefetch = null;
+        }
+        else
+        {
+            if (prefetch is not null)
+            {
+                state.Prefetch = null;
+                await prefetch.DisposeAsync();
+            }
 
+            var streamResult = await provider.GetAudioStreamAsync(item.Url, startFrom, cancellationToken);
+
+            if (!streamResult.IsSuccess)
+            {
+                logger.LogWarning(
+                    "Failed to get audio stream for '{Title}' in guild {GuildId}: {Error}. Advancing silently.",
+                    item.Title, guildId, streamResult.ErrorMessage);
+
+                state.TrackStartedAtUtc = DateTime.UtcNow;
+
+                var remaining = item.Duration!.Value - startFrom;
+                if (remaining > TimeSpan.Zero)
+                {
+                    await Task.Delay(remaining, cancellationToken);
+                }
+
+                return;
+            }
+
+            pcmAudioStream = streamResult.Value!;
+        }
+
+        await using (pcmAudioStream)
+        {
             state.TrackStartedAtUtc = DateTime.UtcNow;
 
-            var remaining = item.Duration!.Value - startFrom;
-            if (remaining > TimeSpan.Zero)
+            logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId}", item.Title, guildId);
+
+            _ = PrefetchNextTrackAsync(guildId, state, state.Cts?.Token ?? CancellationToken.None);
+
+            var discordStream = state.DiscordPcmStream;
+            if (discordStream is null || state.DiscordPcmStreamOwner != audioClient)
             {
-                await Task.Delay(remaining, cancellationToken);
+                if (discordStream is not null)
+                {
+                    await discordStream.FlushAsync(CancellationToken.None);
+                    await discordStream.DisposeAsync();
+                }
+
+                discordStream = audioClient.CreatePCMStream(AudioApplication.Music);
+                state.DiscordPcmStream = discordStream;
+                state.DiscordPcmStreamOwner = audioClient;
             }
 
-            return;
+            try
+            {
+                var buffer = new byte[PcmBufferSize];
+                int bytesRead;
+
+                while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, cancellationToken)) > 0)
+                {
+                    await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error streaming audio for '{Title}' in guild {GuildId}. " +
+                    "Resetting Discord PCM stream.", item.Title, guildId);
+
+                state.DiscordPcmStream = null;
+                state.DiscordPcmStreamOwner = null;
+
+                try
+                {
+                    await discordStream.DisposeAsync();
+                }
+                catch
+                {
+                    // Best effort cleanup.
+                }
+
+                throw;
+            }
+
+            logger.LogInformation("Finished streaming '{Title}' in guild {GuildId}", item.Title, guildId);
         }
+    }
 
-        await using var pcmAudioStream = streamResult.Value!;
-
-        state.TrackStartedAtUtc = DateTime.UtcNow;
-
-        logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId}", item.Title, guildId);
-
-        await using var discordStream = audioClient.CreatePCMStream(AudioApplication.Music);
-
+    private async Task PrefetchNextTrackAsync(ulong guildId, GuildPlaybackState state,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            var buffer = new byte[PcmBufferSize];
-            int bytesRead;
-
-            while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, cancellationToken)) > 0)
+            PlayQueueItem? nextItem;
+            using (var scope = scopeFactory.CreateScope())
             {
-                await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
+                nextItem = await repository.PeekAsync(guildId, skip: 1, cancellationToken: cancellationToken);
             }
-        }
-        finally
-        {
-            await discordStream.FlushAsync(CancellationToken.None);
-        }
 
-        logger.LogInformation("Finished streaming '{Title}' in guild {GuildId}", item.Title, guildId);
+            if (nextItem is null)
+            {
+                return;
+            }
+
+            IAudioStreamProvider provider;
+            try
+            {
+                provider = audioStreamProviderFactory.GetProvider(nextItem.Url);
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            var streamResult = await provider.GetAudioStreamAsync(nextItem.Url, cancellationToken: cancellationToken);
+
+            if (!streamResult.IsSuccess)
+            {
+                return;
+            }
+
+            var oldPrefetch = state.Prefetch;
+            state.Prefetch = new PrefetchedTrack
+            {
+                ItemId = nextItem.Id,
+                Stream = streamResult.Value!,
+            };
+
+            if (oldPrefetch is not null)
+            {
+                await oldPrefetch.DisposeAsync();
+            }
+
+            logger.LogInformation("Prefetched audio stream for next track '{Title}' in guild {GuildId}",
+                nextItem.Title, guildId);
+        }
+        catch (OperationCanceledException)
+        {
+            // Current track was skipped/stopped, prefetch cancelled.
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to prefetch next track in guild {GuildId}", guildId);
+        }
     }
 
     private static void CancelAndReset(GuildPlaybackState state)
@@ -375,6 +490,21 @@ public sealed class QueuePlaybackService(
         {
             state.ElapsedBeforePause += DateTime.UtcNow - state.TrackStartedAtUtc.Value;
             state.TrackStartedAtUtc = null;
+        }
+
+        var prefetch = state.Prefetch;
+        if (prefetch is not null)
+        {
+            state.Prefetch = null;
+            _ = prefetch.DisposeAsync();
+        }
+
+        var discordPcmStream = state.DiscordPcmStream;
+        if (discordPcmStream is not null)
+        {
+            state.DiscordPcmStream = null;
+            state.DiscordPcmStreamOwner = null;
+            _ = DisposeDiscordPcmStreamAsync(discordPcmStream);
         }
 
         state.VoiceConnectedTcs?.TrySetCanceled();
@@ -403,6 +533,27 @@ public sealed class QueuePlaybackService(
         }
 
         state.Cts = null;
+    }
+
+    private static async Task DisposeDiscordPcmStreamAsync(AudioOutStream stream)
+    {
+        try
+        {
+            await stream.FlushAsync(CancellationToken.None);
+        }
+        catch
+        {
+            // Best effort flush before dispose.
+        }
+
+        try
+        {
+            await stream.DisposeAsync();
+        }
+        catch
+        {
+            // Best effort cleanup.
+        }
     }
 
     private async Task SetActivityAsync(string trackTitle)
