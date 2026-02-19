@@ -1,3 +1,4 @@
+using Discord;
 using Discord.Interactions;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
@@ -13,6 +14,7 @@ public class QueueModule(
     IPlayQueueRepository playQueueRepository,
     IUrlProcessorFactory urlProcessorFactory,
     QueuePlaybackService queuePlaybackService,
+    NowPlayingService nowPlayingService,
     ILogger<QueueModule> logger) : InteractionModuleBase
 {
     [SlashCommand("add", "Enqueue an item")]
@@ -72,6 +74,12 @@ public class QueueModule(
         }
 
         await queuePlaybackService.StartAsync(guildId);
+
+        if (!nowPlayingService.IsActive(guildId))
+        {
+            await nowPlayingService.ActivateAsync(guildId, Context.Channel);
+        }
+
         await RespondAsync("Queue started.", ephemeral: true);
     }
 
@@ -104,5 +112,54 @@ public class QueueModule(
 
         logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
         await RespondAsync("Queue cleared.", ephemeral: true);
+    }
+
+    [SlashCommand("now", "Show the Now Playing panel")]
+    public async Task NowAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        await DeferAsync(ephemeral: true);
+
+        await nowPlayingService.ActivateAsync(guildId, Context.Channel);
+
+        await ModifyOriginalResponseAsync(props => props.Content = "Now Playing panel activated.");
+    }
+
+    [SlashCommand("skip", "Skip the current track")]
+    public async Task SkipAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        if (!queuePlaybackService.IsPlaying(guildId))
+        {
+            await RespondAsync("Queue is not playing.", ephemeral: true);
+            return;
+        }
+
+        queuePlaybackService.Skip(guildId);
+        await RespondAsync("Skipped.", ephemeral: true);
+    }
+
+    [SlashCommand("list", "Show the queue")]
+    public async Task ListAsync(int page = 1)
+    {
+        var guildId = Context.Guild.Id;
+
+        var items = await playQueueRepository.GetAllAsync(guildId);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(items.Count / (double)NowPlayingEmbedBuilder.PageSize));
+
+        var pageIndex = Math.Clamp(page - 1, 0, totalPages - 1);
+
+        var pageItems = items
+            .Skip(pageIndex * NowPlayingEmbedBuilder.PageSize)
+            .Take(NowPlayingEmbedBuilder.PageSize)
+            .ToList();
+
+        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var embed = NowPlayingEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, pageIndex, totalPages);
+        var components = NowPlayingEmbedBuilder.BuildQueuePageControls(pageIndex, totalPages);
+
+        await RespondAsync(embed: embed, components: components);
     }
 }

@@ -61,6 +61,15 @@ public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<Pla
         }
     }
 
+    public async Task<PlayQueueItem?> PeekAsync(ulong guildId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.PlayQueueItems
+            .AsNoTracking()
+            .Where(x => x.GuildId == guildId)
+            .OrderBy(x => x.Position)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<PlayQueueItem?> DequeueAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
         var item = await dbContext.PlayQueueItems
@@ -77,6 +86,13 @@ public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<Pla
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return item;
+    }
+
+    public async Task RemoveAsync(long itemId, CancellationToken cancellationToken = default)
+    {
+        await dbContext.PlayQueueItems
+            .Where(x => x.Id == itemId)
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task ClearAsync(ulong guildId, CancellationToken cancellationToken = default)

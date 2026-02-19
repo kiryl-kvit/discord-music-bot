@@ -15,7 +15,7 @@ public sealed class YoutubeAudioStreamProvider(
     ILogger<YoutubeAudioStreamProvider> logger) : IAudioStreamProvider
 {
     public async Task<Result<PcmAudioStream>> GetAudioStreamAsync(string url,
-        CancellationToken cancellationToken = default)
+        TimeSpan startFrom = default, CancellationToken cancellationToken = default)
     {
         var videoId = VideoId.TryParse(url);
         if (videoId is null)
@@ -44,7 +44,7 @@ public sealed class YoutubeAudioStreamProvider(
             var audioStreamUrl = streamInfo.Url;
             var pipe = new Pipe();
 
-            var ffmpegTask = RunFfmpegAsync(audioStreamUrl, pipe.Writer, cancellationToken);
+            var ffmpegTask = RunFfmpegAsync(audioStreamUrl, startFrom, pipe.Writer, cancellationToken);
 
             var pcmAudioStream = new PcmAudioStream(
                 pipe.Reader.AsStream(),
@@ -57,14 +57,14 @@ public sealed class YoutubeAudioStreamProvider(
 
             return Result<PcmAudioStream>.Success(pcmAudioStream);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to get audio stream for YouTube video {VideoId}.", videoId);
             return Result<PcmAudioStream>.Failure("Unable to fetch audio stream for this video.");
         }
     }
 
-    private async Task RunFfmpegAsync(string inputUrl, PipeWriter pipeWriter,
+    private async Task RunFfmpegAsync(string inputUrl, TimeSpan startFrom, PipeWriter pipeWriter,
         CancellationToken cancellationToken)
     {
         try
@@ -73,10 +73,18 @@ public sealed class YoutubeAudioStreamProvider(
             var pipeSink = new StreamPipeSink(writerStream);
 
             await FFMpegArguments
-                .FromUrlInput(new Uri(inputUrl), options => options
-                    .WithCustomArgument("-reconnect 1")
-                    .WithCustomArgument("-reconnect_streamed 1")
-                    .WithCustomArgument("-reconnect_delay_max 5"))
+                .FromUrlInput(new Uri(inputUrl), options =>
+                {
+                    if (startFrom > TimeSpan.Zero)
+                    {
+                        options.WithCustomArgument($"-ss {startFrom:hh\\:mm\\:ss\\.fff}");
+                    }
+
+                    options
+                        .WithCustomArgument("-reconnect 1")
+                        .WithCustomArgument("-reconnect_streamed 1")
+                        .WithCustomArgument("-reconnect_delay_max 5");
+                })
                 .OutputToPipe(pipeSink, options => options
                     .WithCustomArgument("-vn")
                     .WithAudioSamplingRate(48000)
