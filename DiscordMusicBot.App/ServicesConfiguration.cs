@@ -40,85 +40,82 @@ public static class ServicesConfiguration
         return services;
     }
 
-    extension(IServiceCollection services)
+    private static IServiceCollection ConfigureBotOptions(this IServiceCollection services, IConfiguration configuration)
     {
-        private IServiceCollection ConfigureBotOptions(IConfiguration configuration)
+        services.BindOptions<BotSettings>(configuration, BotSettings.SectionName)
+            .Validate(o => !string.IsNullOrWhiteSpace(o.BotToken), "BotSettings:BotToken is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.AppId), "BotSettings:AppId is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.PublicKey), "BotSettings:PublicKey is required.")
+            .ValidateOnStart();
+
+        services.BindOptions<MusicSourcesOptions>(configuration, MusicSourcesOptions.SectionName)
+            .Validate(o => o.PlaylistLimit > 0, "MusicSources:PlaylistLimit must be greater than 0.")
+            .ValidateOnStart();
+
+        return services;
+    }
+
+    private static IServiceCollection ConfigureDatabase(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.BindOptions<SqliteDatabaseOptions>(configuration, SqliteDatabaseOptions.SectionName)
+            .Validate(o => !string.IsNullOrWhiteSpace(o.DbFilePath), "SqliteDatabase:DbFilePath is required.")
+            .ValidateOnStart();
+
+        services.AddDbContext<MusicBotDbContext>((sp, options) =>
         {
-            services.BindOptions<BotSettings>(configuration, BotSettings.SectionName)
-                .Validate(o => !string.IsNullOrWhiteSpace(o.BotToken), "BotSettings:BotToken is required.")
-                .Validate(o => !string.IsNullOrWhiteSpace(o.AppId), "BotSettings:AppId is required.")
-                .Validate(o => !string.IsNullOrWhiteSpace(o.PublicKey), "BotSettings:PublicKey is required.")
-                .ValidateOnStart();
+            var dbOptions = sp.GetRequiredService<IOptions<SqliteDatabaseOptions>>().Value;
+            options.UseSqlite($"Data Source={dbOptions.DbFilePath}");
+        });
 
-            services.BindOptions<MusicSourcesOptions>(configuration, MusicSourcesOptions.SectionName)
-                .Validate(o => o.PlaylistLimit > 0, "MusicSources:PlaylistLimit must be greater than 0.")
-                .ValidateOnStart();
+        services.AddHostedService<DbInitializerHostedService>();
+        services.AddScoped<IPlayQueueRepository, PlayQueueRepository>();
+        return services;
+    }
 
-            return services;
-        }
-
-        private IServiceCollection ConfigureDatabase(IConfiguration configuration)
+    private static IServiceCollection ConfigureDiscordDotNet(this IServiceCollection services)
+    {
+        var socketConfig = new DiscordSocketConfig
         {
-            services.BindOptions<SqliteDatabaseOptions>(configuration, SqliteDatabaseOptions.SectionName)
-                .Validate(o => !string.IsNullOrWhiteSpace(o.DbFilePath), "SqliteDatabase:DbFilePath is required.")
-                .ValidateOnStart();
+            GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.GuildVoiceStates |
+                             GatewayIntents.Guilds,
+            LogLevel = LogSeverity.Info,
+        };
 
-            services.AddDbContext<MusicBotDbContext>((sp, options) =>
-            {
-                var dbOptions = sp.GetRequiredService<IOptions<SqliteDatabaseOptions>>().Value;
-                options.UseSqlite($"Data Source={dbOptions.DbFilePath}");
-            });
-
-            services.AddHostedService<DbInitializerHostedService>();
-            services.AddScoped<IPlayQueueRepository, PlayQueueRepository>();
-            return services;
-        }
-
-        private IServiceCollection ConfigureDiscordDotNet()
+        services.AddSingleton(socketConfig);
+        services.AddSingleton<DiscordSocketClient>(sp =>
         {
-            var socketConfig = new DiscordSocketConfig
-            {
-                GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.GuildVoiceStates |
-                                 GatewayIntents.Guilds,
-                LogLevel = LogSeverity.Info,
-            };
+            var logger = sp.GetRequiredService<ILogger<DiscordSocketClient>>();
+            var client = new DiscordSocketClient(socketConfig);
 
-            services.AddSingleton(socketConfig);
-            services.AddSingleton<DiscordSocketClient>(sp =>
-            {
-                var logger = sp.GetRequiredService<ILogger<DiscordSocketClient>>();
-                var client = new DiscordSocketClient(socketConfig);
+            client.Log += Logging.CreateLogHandler(logger);
 
-                client.Log += Logging.CreateLogHandler(logger);
+            return client;
+        });
 
-                return client;
-            });
-
-            services.AddSingleton<InteractionService>(sp =>
-            {
-                var client = sp.GetRequiredService<DiscordSocketClient>();
-                var logger = sp.GetRequiredService<ILogger<InteractionService>>();
-
-                var interactionService = new InteractionService(client);
-
-                interactionService.Log += Logging.CreateLogHandler(logger);
-
-                return interactionService;
-            });
-
-            services.AddSingleton<InteractionHandler>();
-
-            services.AddSingleton<VoiceConnectionService>();
-            services.AddSingleton<QueuePlaybackService>();
-
-            return services;
-        }
-
-        private OptionsBuilder<TOptions> BindOptions<TOptions>(IConfiguration configuration, string sectionName)
-            where TOptions : class
+        services.AddSingleton<InteractionService>(sp =>
         {
-            return services.AddOptions<TOptions>()
-                .Bind(configuration.GetSection(sectionName));
-        }
+            var client = sp.GetRequiredService<DiscordSocketClient>();
+            var logger = sp.GetRequiredService<ILogger<InteractionService>>();
+
+            var interactionService = new InteractionService(client);
+
+            interactionService.Log += Logging.CreateLogHandler(logger);
+
+            return interactionService;
+        });
+
+        services.AddSingleton<InteractionHandler>();
+
+        services.AddSingleton<VoiceConnectionService>();
+        services.AddSingleton<QueuePlaybackService>();
+
+        return services;
+    }
+
+    private static OptionsBuilder<TOptions> BindOptions<TOptions>(this IServiceCollection services, IConfiguration configuration, string sectionName)
+        where TOptions : class
+    {
+        return services.AddOptions<TOptions>()
+            .Bind(configuration.GetSection(sectionName));
     }
 }
