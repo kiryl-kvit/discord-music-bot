@@ -165,7 +165,7 @@ public sealed class QueuePlaybackService(
                     logger.LogInformation("Track '{Title}' has no duration, skipping to next in guild {GuildId}",
                         item.Title, guildId);
 
-                    await RemoveItemAsync(item.Id, cancellationToken);
+                    await RemoveItemAsync(item.Id);
                     state.CurrentItem = null;
                     state.ElapsedBeforePause = TimeSpan.Zero;
                     continue;
@@ -190,7 +190,7 @@ public sealed class QueuePlaybackService(
                     state.TrackStartedAtUtc = null;
                 }
 
-                await RemoveItemAsync(item.Id, cancellationToken);
+                await RemoveItemAsync(item.Id);
                 state.CurrentItem = null;
                 state.ElapsedBeforePause = TimeSpan.Zero;
             }
@@ -208,13 +208,13 @@ public sealed class QueuePlaybackService(
         }
     }
 
-    private async Task RemoveItemAsync(long itemId, CancellationToken cancellationToken)
+    private async Task RemoveItemAsync(long itemId)
     {
         try
         {
             using var scope = scopeFactory.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
-            await repository.RemoveAsync(itemId, cancellationToken);
+            await repository.RemoveAsync(itemId);
         }
         catch (Exception ex)
         {
@@ -503,21 +503,20 @@ public sealed class QueuePlaybackService(
 
     private static void SafeCancelAndDispose(ref CancellationTokenSource? cts)
     {
-        if (cts is null)
+        var snapshot = Interlocked.Exchange(ref cts, null);
+        if (snapshot is null)
         {
             return;
         }
 
         try
         {
-            cts.Cancel();
-            cts.Dispose();
+            snapshot.Cancel();
+            snapshot.Dispose();
         }
         catch (ObjectDisposedException)
         {
         }
-
-        cts = null;
     }
 
     private static async Task DisposeDiscordPcmStreamAsync(AudioOutStream stream)
