@@ -27,9 +27,11 @@ public sealed class YoutubeAudioStreamProvider(
         {
             var manifest = await youtubeClient.Videos.Streams.GetManifestAsync(videoId.Value, cancellationToken);
 
+            const long targetBitrateKbps = 64;
+
             var streamInfo = manifest
                 .GetAudioOnlyStreams()
-                .OrderByDescending(s => s.Bitrate)
+                .OrderBy(s => Math.Abs(s.Bitrate.KiloBitsPerSecond - targetBitrateKbps))
                 .FirstOrDefault();
 
             if (streamInfo is null)
