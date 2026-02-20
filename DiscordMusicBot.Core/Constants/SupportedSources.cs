@@ -10,8 +10,8 @@ public static class SupportedSources
     [
         new(Key: YoutubeKey,
             Name: "YouTube",
-            Hosts: ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"],
-            ExampleHosts: ["youtube.com", "youtu.be"]),
+            Hosts: ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"],
+            ExampleHosts: ["youtube.com", "music.youtube.com", "youtu.be"]),
     ];
 
     public static bool IsSupported(string url)
