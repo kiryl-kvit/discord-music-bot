@@ -106,6 +106,7 @@ services:
       - .env
     volumes:
       - bot-data:/app/data
+    network_mode: host
 
 volumes:
   bot-data:
