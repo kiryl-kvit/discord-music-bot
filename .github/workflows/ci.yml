@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore DiscordMusicBot.slnx
+
+      - name: Build
+        run: dotnet build DiscordMusicBot.slnx -c Release --no-restore
+
+      - name: Docker build (verify)
+        run: docker build -t discord-music-bot:ci-test .
