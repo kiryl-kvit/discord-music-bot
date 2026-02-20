@@ -2,7 +2,7 @@ using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 
 namespace DiscordMusicBot.App.Services.Models;
 
-public sealed class PrefetchedTrack : IAsyncDisposable
+public sealed class PlaybackTrack : IAsyncDisposable
 {
     public required long ItemId { get; init; }
     public required PcmAudioStream Stream { get; init; }

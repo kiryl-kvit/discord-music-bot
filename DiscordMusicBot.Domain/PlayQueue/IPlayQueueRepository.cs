@@ -12,8 +12,6 @@ public interface IPlayQueueRepository
 
     Task<PlayQueueItem?> PeekAsync(ulong guildId, int skip = 0, CancellationToken cancellationToken = default);
 
-    Task<PlayQueueItem?> DequeueAsync(ulong guildId, CancellationToken cancellationToken = default);
-
     Task RemoveAsync(long itemId, CancellationToken cancellationToken = default);
 
     Task ClearAsync(ulong guildId, CancellationToken cancellationToken = default);

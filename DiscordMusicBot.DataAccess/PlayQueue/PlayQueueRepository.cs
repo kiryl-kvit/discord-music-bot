@@ -6,8 +6,10 @@ using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.DataAccess.PlayQueue;
 
-public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<PlayQueueRepository> logger)
-    : IPlayQueueRepository
+public sealed class PlayQueueRepository(
+    MusicBotDbContext dbContext,
+    IEnumerable<IPlayQueueEventListener> eventListeners,
+    ILogger<PlayQueueRepository> logger) : IPlayQueueRepository
 {
     public async Task<IReadOnlyList<PlayQueueItem>> GetAllAsync(ulong guildId,
         CancellationToken cancellationToken = default)
@@ -52,6 +54,8 @@ public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<Pla
             dbContext.PlayQueueItems.AddRange(items);
             await dbContext.SaveChangesAsync(cancellationToken);
 
+            await NotifyItemsAddedAsync(guildId, items);
+
             return Result<IReadOnlyList<PlayQueueItem>>.Success(items);
         }
         catch (Exception ex)
@@ -72,35 +76,69 @@ public sealed class PlayQueueRepository(MusicBotDbContext dbContext, ILogger<Pla
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<PlayQueueItem?> DequeueAsync(ulong guildId, CancellationToken cancellationToken = default)
-    {
-        var item = await dbContext.PlayQueueItems
-            .Where(x => x.GuildId == guildId)
-            .OrderBy(x => x.Position)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (item is null)
-        {
-            return null;
-        }
-
-        dbContext.PlayQueueItems.Remove(item);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return item;
-    }
-
     public async Task RemoveAsync(long itemId, CancellationToken cancellationToken = default)
     {
+        var item = await dbContext.PlayQueueItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == itemId, cancellationToken);
+
         await dbContext.PlayQueueItems
             .Where(x => x.Id == itemId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        if (item is not null)
+        {
+            await NotifyItemsRemovedAsync(item.GuildId, [item]);
+        }
     }
 
     public async Task ClearAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
+        var items = await dbContext.PlayQueueItems
+            .AsNoTracking()
+            .Where(x => x.GuildId == guildId)
+            .OrderBy(x => x.Position)
+            .ToListAsync(cancellationToken);
+
         await dbContext.PlayQueueItems
             .Where(x => x.GuildId == guildId)
             .ExecuteDeleteAsync(cancellationToken);
+
+        if (items.Count > 0)
+        {
+            await NotifyItemsRemovedAsync(guildId, items);
+        }
+    }
+
+    private async Task NotifyItemsAddedAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items)
+    {
+        foreach (var listener in eventListeners)
+        {
+            try
+            {
+                await listener.OnItemsAddedAsync(guildId, items);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Event listener {Listener} failed handling OnItemsAdded for guild {GuildId}",
+                    listener.GetType().Name, guildId);
+            }
+        }
+    }
+
+    private async Task NotifyItemsRemovedAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items)
+    {
+        foreach (var listener in eventListeners)
+        {
+            try
+            {
+                await listener.OnItemsRemovedAsync(guildId, items);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Event listener {Listener} failed handling OnItemsRemoved for guild {GuildId}",
+                    listener.GetType().Name, guildId);
+            }
+        }
     }
 }

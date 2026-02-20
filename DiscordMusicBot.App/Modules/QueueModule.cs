@@ -1,4 +1,3 @@
-using Discord;
 using Discord.Interactions;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
@@ -84,7 +83,7 @@ public class QueueModule(
             return;
         }
 
-        await queuePlaybackService.StartAsync(guildId);
+        queuePlaybackService.Start(guildId);
 
         var embed = QueueEmbedBuilder.BuildNowPlayingEmbed(nextItem);
         await RespondAsync(embed: embed);

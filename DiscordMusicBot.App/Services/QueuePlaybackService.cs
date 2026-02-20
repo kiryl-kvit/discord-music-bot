@@ -2,8 +2,8 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
+using DiscordMusicBot.App.Extensions;
 using DiscordMusicBot.App.Services.Models;
-using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,12 +11,12 @@ using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Services;
 
-public sealed class QueuePlaybackService(
+public sealed partial class QueuePlaybackService(
     IServiceScopeFactory scopeFactory,
     IAudioStreamProviderFactory audioStreamProviderFactory,
     VoiceConnectionService voiceConnectionService,
     DiscordSocketClient discordClient,
-    ILogger<QueuePlaybackService> logger)
+    ILogger<QueuePlaybackService> logger) : IPlayQueueEventListener
 {
     private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
 
@@ -24,36 +24,22 @@ public sealed class QueuePlaybackService(
 
     public bool IsPlaying(ulong guildId)
     {
-        return _states.TryGetValue(guildId, out var state) && state.IsPlaying;
+        return GetState(guildId).IsPlaying;
     }
 
     public PlayQueueItem? GetCurrentItem(ulong guildId)
     {
-        return _states.TryGetValue(guildId, out var state) ? state.CurrentItem : null;
+        return GetState(guildId).CurrentItem;
     }
 
-    public TimeSpan? GetElapsed(ulong guildId)
+    public void Start(ulong guildId)
     {
-        if (!_states.TryGetValue(guildId, out var state))
-        {
-            return null;
-        }
-
-        var sinceResume = state.TrackStartedAtUtc is not null
-            ? DateTime.UtcNow - state.TrackStartedAtUtc.Value
-            : TimeSpan.Zero;
-
-        return state.ElapsedBeforePause + sinceResume;
-    }
-
-    public Task StartAsync(ulong guildId)
-    {
-        var state = _states.GetOrAdd(guildId, _ => new GuildPlaybackState());
+        var state = GetState(guildId);
 
         if (state.IsPlaying)
         {
             logger.LogInformation("Queue is already playing in guild {GuildId}", guildId);
-            return Task.CompletedTask;
+            return;
         }
 
         state.Cts = new CancellationTokenSource();
@@ -61,9 +47,7 @@ public sealed class QueuePlaybackService(
 
         logger.LogInformation("Starting queue playback in guild {GuildId}", guildId);
 
-        _ = RunAdvancementLoopAsync(guildId, state);
-
-        return Task.CompletedTask;
+        _ = RunAdvancementLoopAsync(guildId);
     }
 
     public async Task StopAsync(ulong guildId)
@@ -99,63 +83,34 @@ public sealed class QueuePlaybackService(
         }
     }
 
-    public Task OnVoiceConnected(ulong guildId)
+    private GuildPlaybackState GetState(ulong guildId)
     {
-        if (!_states.TryGetValue(guildId, out var state) || !state.IsPlaying)
-        {
-            return Task.CompletedTask;
-        }
-
-        logger.LogInformation("Voice connected in guild {GuildId} while queue is playing.", guildId);
-
-        state.VoiceConnectedTcs?.TrySetResult();
-
-        return Task.CompletedTask;
+        return _states.GetOrAdd(guildId, new GuildPlaybackState());
     }
 
-    public Task OnVoiceDisconnected(ulong guildId)
+    private async Task RunAdvancementLoopAsync(ulong guildId)
     {
-        if (IsPlaying(guildId))
-        {
-            logger.LogInformation(
-                "Voice disconnected in guild {GuildId}. Queue continues advancing silently.", guildId);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    private async Task RunAdvancementLoopAsync(ulong guildId, GuildPlaybackState state)
-    {
-        var cancellationToken = state.Cts?.Token ?? CancellationToken.None;
+        var state = GetState(guildId);
+        var cancellationToken = state.Cts!.Token;
 
         try
         {
             while (state.IsPlaying && !cancellationToken.IsCancellationRequested)
             {
+                state.CurrentItem = state.Items.Pop();
                 var item = state.CurrentItem;
 
                 if (item is null)
                 {
-                    using (var scope = scopeFactory.CreateScope())
-                    {
-                        var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
-                        item = await repository.PeekAsync(guildId, cancellationToken: cancellationToken);
-                    }
+                    logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
 
-                    if (item is null)
-                    {
-                        logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
-                        CancelAndReset(state);
-                        await ClearActivityAsync();
+                    CancelAndReset(state);
+                    await ClearActivityAsync();
 
-                        break;
-                    }
-
-                    state.CurrentItem = item;
+                    break;
                 }
 
-                logger.LogInformation(
-                    "Now playing: '{Title}' by {Author} ({Duration}) in guild {GuildId}",
+                logger.LogInformation("Now playing: '{Title}' by {Author} ({Duration}) in guild {GuildId}",
                     item.Title, item.Author ?? "Unknown", item.Duration, guildId);
 
                 await SetActivityAsync(item.Title);
@@ -165,9 +120,7 @@ public sealed class QueuePlaybackService(
                     logger.LogInformation("Track '{Title}' has no duration, skipping to next in guild {GuildId}",
                         item.Title, guildId);
 
-                    await RemoveItemAsync(item.Id);
-                    state.CurrentItem = null;
-                    state.ElapsedBeforePause = TimeSpan.Zero;
+                    await RemoveCurrentItemAsync(guildId);
                     continue;
                 }
 
@@ -176,7 +129,7 @@ public sealed class QueuePlaybackService(
 
                 try
                 {
-                    await PlayTrackAsync(guildId, item, state, state.ElapsedBeforePause, skipCts.Token);
+                    await StreamToVoiceAsync(guildId);
                 }
                 catch (OperationCanceledException) when (skipCts.IsCancellationRequested
                                                          && !cancellationToken.IsCancellationRequested)
@@ -187,12 +140,9 @@ public sealed class QueuePlaybackService(
                 {
                     skipCts.Dispose();
                     state.SkipCts = null;
-                    state.TrackStartedAtUtc = null;
                 }
 
-                await RemoveItemAsync(item.Id);
-                state.CurrentItem = null;
-                state.ElapsedBeforePause = TimeSpan.Zero;
+                await RemoveCurrentItemAsync(guildId);
             }
         }
         catch (OperationCanceledException)
@@ -208,155 +158,60 @@ public sealed class QueuePlaybackService(
         }
     }
 
-    private async Task RemoveItemAsync(long itemId)
+    private async Task RemoveCurrentItemAsync(ulong guildId)
     {
         try
         {
+            var state = GetState(guildId);
+
+            if (state.CurrentItem is null)
+            {
+                return;
+            }
+
             using var scope = scopeFactory.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
-            await repository.RemoveAsync(itemId);
+            await repository.RemoveAsync(state.CurrentItem.Id);
+
+            state.CurrentItem = null;
+            state.CurrentTrack = null;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to remove item {ItemId} from queue", itemId);
+            logger.LogError(ex, "Failed to remove current item from queue in guild {GuildId}", guildId);
         }
     }
 
-    private async Task AdvanceSilentlyAsync(TimeSpan startFrom, TimeSpan duration, CancellationToken cancellationToken)
+    private async Task StreamToVoiceAsync(ulong guildId)
     {
-        var remaining = duration - startFrom;
-        if (remaining > TimeSpan.Zero)
-        {
-            await Task.Delay(remaining, cancellationToken);
-        }
-    }
+        var state = GetState(guildId);
+        var item = state.CurrentItem!;
+        var cancellationToken = state.SkipCts?.Token ?? CancellationToken.None;
 
-    private async Task<TimeSpan> WaitForVoiceOrAdvanceSilentlyAsync(PlayQueueItem item, GuildPlaybackState state,
-        TimeSpan startFrom, CancellationToken cancellationToken)
-    {
-        state.TrackStartedAtUtc = DateTime.UtcNow;
-
-        var remaining = item.Duration!.Value - startFrom;
-        if (remaining <= TimeSpan.Zero)
+        var audioClient = voiceConnectionService.GetConnection(guildId)!;
+        if (audioClient is null)
         {
-            return item.Duration.Value;
+            throw new ArgumentNullException(
+                $"Not in voice channel for guild {guildId}. Cannot play tracks");
         }
 
-        var voiceTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        state.VoiceConnectedTcs = voiceTcs;
+        var provider = audioStreamProviderFactory.GetProvider(item.Url);
 
-        using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var delayTask = Task.Delay(remaining, delayCts.Token);
+        var streamResult = await provider.GetAudioStreamAsync(item.Url, cancellationToken: cancellationToken);
 
-        var completed = await Task.WhenAny(delayTask, voiceTcs.Task);
-
-        if (completed == delayTask)
+        if (!streamResult.IsSuccess)
         {
-            await delayTask;
-            state.VoiceConnectedTcs = null;
-            return item.Duration.Value;
-        }
-
-        await delayCts.CancelAsync();
-
-        state.VoiceConnectedTcs = null;
-        var elapsed = state.ElapsedBeforePause + (DateTime.UtcNow - (state.TrackStartedAtUtc ?? DateTime.UtcNow));
-        state.TrackStartedAtUtc = null;
-
-        return elapsed;
-    }
-
-    private async Task PlayTrackAsync(ulong guildId, PlayQueueItem item, GuildPlaybackState state,
-        TimeSpan startFrom, CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            var audioClient = voiceConnectionService.GetConnection(guildId);
-
-            if (audioClient is not null)
-            {
-                state.VoiceConnectedTcs = null;
-                await StreamToVoiceAsync(guildId, item, state, startFrom, audioClient, cancellationToken);
-                return;
-            }
-
-            logger.LogInformation(
-                "Not in voice channel for guild {GuildId}. Advancing silently for '{Title}'.",
-                guildId, item.Title);
-
-            startFrom = await WaitForVoiceOrAdvanceSilentlyAsync(item, state, startFrom, cancellationToken);
-
-            if (startFrom >= item.Duration!.Value)
-            {
-                return;
-            }
-
-            logger.LogInformation(
-                "Voice connected mid-track in guild {GuildId}. Resuming '{Title}' from {Elapsed}.",
-                guildId, item.Title, startFrom);
-        }
-    }
-
-    private async Task StreamToVoiceAsync(ulong guildId, PlayQueueItem item, GuildPlaybackState state,
-        TimeSpan startFrom, IAudioClient audioClient, CancellationToken cancellationToken)
-    {
-        IAudioStreamProvider provider;
-        try
-        {
-            provider = audioStreamProviderFactory.GetProvider(item.Url);
-        }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogWarning(ex,
-                "No audio stream provider for '{Url}' in guild {GuildId}. Advancing silently.",
-                item.Url, guildId);
-
-            state.TrackStartedAtUtc = DateTime.UtcNow;
-            await AdvanceSilentlyAsync(startFrom, item.Duration!.Value, cancellationToken);
+            logger.LogWarning(
+                "Failed to get audio stream for '{Title}' in guild {GuildId}: {Error}. Skipping.",
+                item.Title, guildId, streamResult.ErrorMessage);
             return;
         }
 
-        PcmAudioStream pcmAudioStream;
-
-        var prefetch = state.Prefetch;
-        if (prefetch is not null && prefetch.ItemId == item.Id && startFrom == TimeSpan.Zero)
-        {
-            logger.LogInformation("Using prefetched audio stream for '{Title}' in guild {GuildId}",
-                item.Title, guildId);
-            pcmAudioStream = prefetch.Stream;
-            state.Prefetch = null;
-        }
-        else
-        {
-            if (prefetch is not null)
-            {
-                state.Prefetch = null;
-                await prefetch.DisposeAsync();
-            }
-
-            var streamResult = await provider.GetAudioStreamAsync(item.Url, startFrom, cancellationToken);
-
-            if (!streamResult.IsSuccess)
-            {
-                logger.LogWarning(
-                    "Failed to get audio stream for '{Title}' in guild {GuildId}: {Error}. Advancing silently.",
-                    item.Title, guildId, streamResult.ErrorMessage);
-
-                state.TrackStartedAtUtc = DateTime.UtcNow;
-                await AdvanceSilentlyAsync(startFrom, item.Duration!.Value, cancellationToken);
-                return;
-            }
-
-            pcmAudioStream = streamResult.Value!;
-        }
+        var pcmAudioStream = streamResult.Value!;
 
         await using (pcmAudioStream)
         {
-            state.TrackStartedAtUtc = DateTime.UtcNow;
-
             logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId}", item.Title, guildId);
-
-            _ = PrefetchNextTrackAsync(guildId, state, state.Cts?.Token ?? CancellationToken.None);
 
             var discordStream = state.DiscordPcmStream;
             if (discordStream is null || state.DiscordPcmStreamOwner != audioClient)
@@ -389,7 +244,7 @@ public sealed class QueuePlaybackService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Error streaming audio for '{Title}' in guild {GuildId}. " +
-                    "Resetting Discord PCM stream.", item.Title, guildId);
+                                      "Resetting Discord PCM stream.", item.Title, guildId);
 
                 state.DiscordPcmStream = null;
                 state.DiscordPcmStreamOwner = null;
@@ -400,7 +255,7 @@ public sealed class QueuePlaybackService(
                 }
                 catch
                 {
-                    // Best effort cleanup.
+                    //
                 }
 
                 throw;
@@ -410,81 +265,9 @@ public sealed class QueuePlaybackService(
         }
     }
 
-    private async Task PrefetchNextTrackAsync(ulong guildId, GuildPlaybackState state,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            PlayQueueItem? nextItem;
-            using (var scope = scopeFactory.CreateScope())
-            {
-                var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
-                nextItem = await repository.PeekAsync(guildId, skip: 1, cancellationToken: cancellationToken);
-            }
-
-            if (nextItem is null)
-            {
-                return;
-            }
-
-            IAudioStreamProvider provider;
-            try
-            {
-                provider = audioStreamProviderFactory.GetProvider(nextItem.Url);
-            }
-            catch (InvalidOperationException)
-            {
-                return;
-            }
-
-            var streamResult = await provider.GetAudioStreamAsync(nextItem.Url, cancellationToken: cancellationToken);
-
-            if (!streamResult.IsSuccess)
-            {
-                return;
-            }
-
-            var oldPrefetch = state.Prefetch;
-            state.Prefetch = new PrefetchedTrack
-            {
-                ItemId = nextItem.Id,
-                Stream = streamResult.Value!,
-            };
-
-            if (oldPrefetch is not null)
-            {
-                await oldPrefetch.DisposeAsync();
-            }
-
-            logger.LogInformation("Prefetched audio stream for next track '{Title}' in guild {GuildId}",
-                nextItem.Title, guildId);
-        }
-        catch (OperationCanceledException)
-        {
-            // Current track was skipped/stopped, prefetch cancelled.
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to prefetch next track in guild {GuildId}", guildId);
-        }
-    }
-
     private static void CancelAndReset(GuildPlaybackState state)
     {
         state.IsPlaying = false;
-
-        if (state.TrackStartedAtUtc is not null)
-        {
-            state.ElapsedBeforePause += DateTime.UtcNow - state.TrackStartedAtUtc.Value;
-            state.TrackStartedAtUtc = null;
-        }
-
-        if (state.Prefetch is not null)
-        {
-            var prefetch = state.Prefetch;
-            state.Prefetch = null;
-            _ = prefetch.DisposeAsync();
-        }
 
         if (state.DiscordPcmStream is not null)
         {
@@ -493,9 +276,6 @@ public sealed class QueuePlaybackService(
             state.DiscordPcmStreamOwner = null;
             _ = DisposeDiscordPcmStreamAsync(discordPcmStream);
         }
-
-        state.VoiceConnectedTcs?.TrySetCanceled();
-        state.VoiceConnectedTcs = null;
 
         SafeCancelAndDispose(ref state.SkipCts);
         SafeCancelAndDispose(ref state.Cts);
@@ -524,19 +304,11 @@ public sealed class QueuePlaybackService(
         try
         {
             await stream.FlushAsync(CancellationToken.None);
-        }
-        catch
-        {
-            // Best effort flush before dispose.
-        }
-
-        try
-        {
             await stream.DisposeAsync();
         }
         catch
         {
-            // Best effort cleanup.
+            //
         }
     }
 
