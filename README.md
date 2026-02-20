@@ -55,6 +55,45 @@ docker pull ghcr.io/kiryl-kvit/discord-music-bot:latest
 docker run -d --env-file .env ghcr.io/kiryl-kvit/discord-music-bot:latest
 ```
 
+## Deployment
+
+### Docker Compose
+
+Create a `docker-compose.yml` file:
+
+```yaml
+services:
+  discord-music-bot:
+    image: ghcr.io/kiryl-kvit/discord-music-bot:latest
+    container_name: discord-music-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - bot-data:/app/data
+
+volumes:
+  bot-data:
+```
+
+Create a `.env` file in the same directory:
+
+```env
+BOT_TOKEN=your_bot_token
+APP_ID=your_application_id
+PUBLIC_KEY=your_public_key
+DB_FILE_PATH=/app/data/database.db
+PLAYLIST_LIMIT=50
+```
+
+> **Note:** `DB_FILE_PATH` must use a path inside the container. The `/app/data` directory is backed by a named volume, so the database persists across container restarts.
+
+Then run:
+
+```bash
+docker compose up -d
+```
+
 ## Project Structure
 
 ```
