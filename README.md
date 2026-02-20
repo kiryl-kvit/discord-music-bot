@@ -57,6 +57,41 @@ docker run -d --env-file .env ghcr.io/kiryl-kvit/discord-music-bot:latest
 
 ## Deployment
 
+### 1. Create a Discord Application
+
+Follow the official Discord guide to create a new application and bot user:
+[Setting up a bot application](https://discord.com/developers/docs/quick-start/getting-started#step-1-creating-an-app)
+
+From the application page, copy the following values for your `.env` file:
+- **Application ID** → `APP_ID`
+- **Public Key** → `PUBLIC_KEY`
+
+### 2. Get the Bot Token
+
+Navigate to the **Bot** tab and copy (or reset) the token:
+- **Token** → `BOT_TOKEN`
+
+### 3. Configure Privileged Gateway Intents
+
+No privileged intents are required. The bot only uses unprivileged intents (`Guilds`, `GuildVoiceStates`, etc.), so you can leave all privileged intent toggles **disabled** on the Bot tab.
+
+### 4. Invite the Bot to Your Server
+
+Go to the **Installation** tab and generate an invite URL with the following settings:
+
+**Scopes:**
+- `bot`
+- `applications.commands`
+
+**Bot Permissions:**
+- Connect
+- Speak
+- Send Messages
+- Embed Links
+- Use Voice Activity
+- Use Slash Commands
+- Bypass Slowmode (Optional, but recommended for better user experience)
+
 ### Docker Compose
 
 Create a `docker-compose.yml` file:
