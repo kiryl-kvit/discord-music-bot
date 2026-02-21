@@ -1,8 +1,11 @@
+using System.Globalization;
 using System.IO.Pipelines;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
+using DiscordMusicBot.Core.MusicSource.Options;
 using FFMpegCore;
 using FFMpegCore.Pipes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using YoutubeExplode;
 using YoutubeExplode.Videos;
 
@@ -10,6 +13,7 @@ namespace DiscordMusicBot.Core.MusicSource.AudioStreaming;
 
 public sealed class YoutubeAudioStreamProvider(
     YoutubeClient youtubeClient,
+    IOptions<MusicSourcesOptions> musicSourcesOptions,
     ILogger<YoutubeAudioStreamProvider> logger) : IAudioStreamProvider
 {
     public async Task<Result<PcmAudioStream>> GetAudioStreamAsync(string url,
@@ -76,6 +80,8 @@ public sealed class YoutubeAudioStreamProvider(
             await using var writerStream = pipeWriter.AsStream();
             var pipeSink = new StreamPipeSink(writerStream);
 
+            var volume = musicSourcesOptions.Value.Volume;
+
             await FFMpegArguments
                 .FromUrlInput(new Uri(inputUrl), options =>
                 {
@@ -89,11 +95,20 @@ public sealed class YoutubeAudioStreamProvider(
                         .WithCustomArgument("-reconnect_streamed 1")
                         .WithCustomArgument("-reconnect_delay_max 5");
                 })
-                .OutputToPipe(pipeSink, options => options
-                    .WithCustomArgument("-vn")
-                    .WithAudioSamplingRate(48000)
-                    .ForceFormat("s16le")
-                    .WithCustomArgument("-ac 2"))
+                .OutputToPipe(pipeSink, options =>
+                {
+                    options
+                        .WithCustomArgument("-vn")
+                        .WithAudioSamplingRate(48000)
+                        .ForceFormat("s16le")
+                        .WithCustomArgument("-ac 2");
+
+                    if (Math.Abs(volume - 1.0) > 0.001)
+                    {
+                        options.WithCustomArgument(
+                            $"-af volume={volume.ToString("F2", CultureInfo.InvariantCulture)}");
+                    }
+                })
                 .CancellableThrough(cancellationToken)
                 .ProcessAsynchronously();
         }

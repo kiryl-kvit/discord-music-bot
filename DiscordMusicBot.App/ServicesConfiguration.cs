@@ -46,6 +46,8 @@ public static class ServicesConfiguration
 
             services.BindOptions<MusicSourcesOptions>(configuration, MusicSourcesOptions.SectionName)
                 .Validate(o => o.PlaylistLimit > 0, "MusicSources:PlaylistLimit must be greater than 0.")
+                .Validate(o => o.Volume is >= 0.0 and <= 2.0,
+                    "MusicSources:Volume must be between 0.0 and 2.0.")
                 .ValidateOnStart();
 
             return services;
