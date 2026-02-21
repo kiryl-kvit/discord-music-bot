@@ -26,11 +26,21 @@ public sealed class EnvFileConfigurationProvider : ConfigurationProvider, IDispo
 
         if (File.Exists(_source.FilePath))
         {
-            var parsedValues = Env.Load(_source.FilePath, Env.NoEnvVars());
-
-            foreach (var kv in parsedValues)
+            try
             {
-                envFileValues[kv.Key] = kv.Value;
+                var parsedValues = Env.Load(_source.FilePath, Env.NoEnvVars());
+
+                foreach (var kv in parsedValues)
+                {
+                    envFileValues[kv.Key] = kv.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"Failed to parse .env file '{_source.FilePath}': {ex.Message}. " +
+                    "Retaining previous configuration.");
+                return;
             }
         }
 
@@ -85,8 +95,11 @@ public sealed class EnvFileConfigurationProvider : ConfigurationProvider, IDispo
             _debounceTimer = new Timer(
                 _ =>
                 {
-                    Load();
-                    OnReload();
+                    lock (_reloadLock)
+                    {
+                        Load();
+                        OnReload();
+                    }
                 },
                 state: null,
                 dueTime: TimeSpan.FromSeconds(1),
