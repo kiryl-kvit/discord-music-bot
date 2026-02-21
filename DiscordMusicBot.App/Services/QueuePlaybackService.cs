@@ -369,8 +369,8 @@ public sealed partial class QueuePlaybackService(
         }
 
         logger.LogWarning(
-            "Failed to get audio stream for '{Title}': {Error}. Skipping.",
-            item.Title, streamResult.ErrorMessage);
+            "Guild {GuildId}. Failed to get audio stream for '{Title}': {Error}. Skipping.",
+            item.GuildId, item.Title, streamResult.ErrorMessage);
 
         return null;
     }
