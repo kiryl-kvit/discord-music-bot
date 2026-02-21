@@ -333,8 +333,8 @@ public sealed partial class QueuePlaybackService(
             _ = DisposeDiscordPcmStreamAsync(discordPcmStream);
         }
 
-        SafeCancelAndDispose(ref state.SkipCts);
         SafeCancelAndDispose(ref state.PauseCts);
+        SafeCancelAndDispose(ref state.SkipCts);
     }
 
     private static void SafeCancelAndDispose(ref CancellationTokenSource? cts)
