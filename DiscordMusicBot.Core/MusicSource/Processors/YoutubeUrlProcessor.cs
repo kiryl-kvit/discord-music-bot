@@ -11,11 +11,10 @@ namespace DiscordMusicBot.Core.MusicSource.Processors;
 
 public sealed class YoutubeUrlProcessor(
     YoutubeClient youtubeClient,
-    IOptions<MusicSourcesOptions> options,
+    IOptionsMonitor<MusicSourcesOptions> options,
     ILogger<YoutubeUrlProcessor> logger)
     : IUrlProcessor
 {
-    private readonly MusicSourcesOptions _options = options.Value;
 
     public async Task<Result<IReadOnlyCollection<MusicSource>>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default)
@@ -61,7 +60,7 @@ public sealed class YoutubeUrlProcessor(
         CancellationToken cancellationToken)
     {
         var sources = new List<MusicSource>();
-        var limit = _options.PlaylistLimit;
+        var limit = options.CurrentValue.PlaylistLimit;
         try
         {
             await foreach (var video in youtubeClient.Playlists.GetVideosAsync(playlistId, cancellationToken))

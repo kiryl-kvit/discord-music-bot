@@ -13,16 +13,16 @@ namespace DiscordMusicBot.Core.MusicSource.AudioStreaming;
 
 public sealed class YoutubeAudioStreamProvider(
     YoutubeClient youtubeClient,
-    IOptions<MusicSourcesOptions> musicSourcesOptions,
+    IOptionsMonitor<MusicSourcesOptions> musicSourcesOptions,
     ILogger<YoutubeAudioStreamProvider> logger) : IAudioStreamProvider
 {
-    public async Task<Result<PcmAudioStream>> GetAudioStreamAsync(string url,
-        TimeSpan startFrom = default, CancellationToken cancellationToken = default)
+    public async Task<Result<ResolvedStream>> ResolveStreamAsync(string url,
+        CancellationToken cancellationToken = default)
     {
         var videoId = VideoId.TryParse(url);
         if (videoId is null)
         {
-            return Result<PcmAudioStream>.Failure("Invalid YouTube URL.");
+            return Result<ResolvedStream>.Failure("Invalid YouTube URL.");
         }
 
         try
@@ -38,21 +38,34 @@ public sealed class YoutubeAudioStreamProvider(
 
             if (streamInfo is null)
             {
-                return Result<PcmAudioStream>.Failure("No audio streams available for this video.");
+                return Result<ResolvedStream>.Failure("No audio streams available for this video.");
             }
 
             logger.LogInformation(
                 "Resolved audio stream for '{VideoId}': {Codec} @ {Bitrate}kbps, container: {Container}",
                 videoId, streamInfo.AudioCodec, streamInfo.Bitrate.KiloBitsPerSecond, streamInfo.Container);
 
-            var audioStreamUrl = streamInfo.Url;
+            return Result<ResolvedStream>.Success(new ResolvedStream(streamInfo.Url, url));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to resolve audio stream for YouTube video {VideoId}.", videoId);
+            return Result<ResolvedStream>.Failure("Unable to fetch audio stream for this video.");
+        }
+    }
+
+    public Task<Result<PcmAudioStream>> GetAudioStreamAsync(ResolvedStream resolved,
+        TimeSpan startFrom = default, CancellationToken cancellationToken = default)
+    {
+        try
+        {
             var pipe = new Pipe();
 
-            var ffmpegTask = RunFfmpegAsync(audioStreamUrl, startFrom, pipe.Writer, cancellationToken);
+            var ffmpegTask = RunFfmpegAsync(resolved.StreamUrl, startFrom, pipe.Writer, cancellationToken);
 
             var pcmAudioStream = new PcmAudioStream(
                 pipe.Reader.AsStream(),
-                url,
+                resolved.SourceUrl,
                 async () =>
                 {
                     // Complete the reader so the FFmpeg pipe-writer side gets a broken pipe
@@ -63,12 +76,12 @@ public sealed class YoutubeAudioStreamProvider(
                     _ = ffmpegTask.ContinueWith(_ => { }, TaskScheduler.Default);
                 });
 
-            return Result<PcmAudioStream>.Success(pcmAudioStream);
+            return Task.FromResult(Result<PcmAudioStream>.Success(pcmAudioStream));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Failed to get audio stream for YouTube video {VideoId}.", videoId);
-            return Result<PcmAudioStream>.Failure("Unable to fetch audio stream for this video.");
+            logger.LogWarning(ex, "Failed to launch FFmpeg for resolved stream '{SourceUrl}'.", resolved.SourceUrl);
+            return Task.FromResult(Result<PcmAudioStream>.Failure("Unable to launch audio stream for this video."));
         }
     }
 
@@ -80,7 +93,7 @@ public sealed class YoutubeAudioStreamProvider(
             await using var writerStream = pipeWriter.AsStream();
             var pipeSink = new StreamPipeSink(writerStream);
 
-            var volume = musicSourcesOptions.Value.Volume;
+            var volume = musicSourcesOptions.CurrentValue.Volume;
 
             await FFMpegArguments
                 .FromUrlInput(new Uri(inputUrl), options =>
