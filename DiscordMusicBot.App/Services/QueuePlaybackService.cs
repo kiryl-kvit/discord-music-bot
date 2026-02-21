@@ -352,7 +352,7 @@ public sealed partial class QueuePlaybackService(
             {
                 await SendFeedbackAsync(guildId,
                     $"Failed to play '{item.Title}'",
-                    $"{streamResult.ErrorMessage} Skipping to next track.");
+                    $"{streamResult.ErrorMessage}. Skipping to next track.");
                 return;
             }
 
