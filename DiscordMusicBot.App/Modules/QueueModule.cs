@@ -124,10 +124,11 @@ public class QueueModule(
     }
 
     [SlashCommand("list", "Show the queue")]
-    public async Task ListAsync(int page = 1)
+    public async Task ListAsync([MinValue(1)] int page = 1)
     {
         var guildId = Context.Guild.Id;
 
+        page = Math.Max(1, page);
         const int pageSize = QueueEmbedBuilder.PageSize;
         var pageIndex = page - 1;
         var skip = pageIndex * pageSize;

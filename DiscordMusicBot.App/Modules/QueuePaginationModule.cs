@@ -10,6 +10,7 @@ public class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : 
     {
         var guildId = Context.Guild.Id;
 
+        page = Math.Max(1, page);
         const int pageSize = QueueEmbedBuilder.PageSize;
         var pageIndex = page - 1;
         var skip = pageIndex * pageSize;
