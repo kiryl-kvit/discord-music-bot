@@ -22,6 +22,8 @@ public sealed class GuildPlaybackState
     public TimeSpan ResumePosition;
     public long? ResumeItemId;
 
+    public PlaybackTrack? PrefetchedTrack;
+
     public T WithItems<T>(Func<List<PlayQueueItem>, T> action)
     {
         lock (_itemsLock)
