@@ -17,7 +17,8 @@ public class VoiceModule(
 
         if (voiceChannel is null)
         {
-            await RespondAsync("You must be in a voice channel first. Join a voice channel and try again.", ephemeral: true);
+            await RespondAsync("You must be in a voice channel first. Join a voice channel and try again.",
+                ephemeral: true);
             return;
         }
 
@@ -34,7 +35,39 @@ public class VoiceModule(
             logger.LogError(ex, "Failed to join voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
                 voiceChannel.Name, voiceChannel.Id, Context.Guild.Id);
             await ModifyOriginalResponseAsync(props =>
-                props.Content = "Failed to join the voice channel. Please check that the bot has permission to join and speak in the channel.");
+                props.Content =
+                    "Failed to join the voice channel. Please check that the bot has permission to join and speak in the channel.");
+        }
+    }
+
+    [SlashCommand("leave", "Leave the current voice channel", runMode: RunMode.Async)]
+    public async Task LeaveAsync()
+    {
+        var guildUser = Context.User as IGuildUser;
+        var voiceChannel = guildUser?.VoiceChannel;
+
+        if (voiceChannel is null)
+        {
+            await RespondAsync("You must be in a voice channel first. Join a voice channel and try again.",
+                ephemeral: true);
+            return;
+        }
+
+        await DeferAsync(ephemeral: true);
+
+        try
+        {
+            await voiceConnectionService.LeaveAsync(voiceChannel);
+            await ModifyOriginalResponseAsync(props =>
+                props.Content = $"Left **{voiceChannel.Name}**.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to leave voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
+                voiceChannel.Name, voiceChannel.Id, Context.Guild.Id);
+            await ModifyOriginalResponseAsync(props =>
+                props.Content =
+                    "Failed to leave the voice channel. Please check that the bot has permission to leave the channel.");
         }
     }
 }

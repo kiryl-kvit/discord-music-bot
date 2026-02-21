@@ -45,14 +45,26 @@ public sealed partial class QueuePlaybackService(
         state.Items.AddRange(items);
     }
 
-    public void Start(ulong guildId)
+    public async Task ClearQueueAsync(ulong guildId)
+    {
+        var state = GetState(guildId);
+
+        if (state.IsPlaying)
+        {
+            await StopAsync(guildId);
+        }
+
+        state.Items.Clear();
+    }
+
+    public Task StartAsync(ulong guildId)
     {
         var state = GetState(guildId);
 
         if (state.IsPlaying)
         {
             logger.LogInformation("Queue is already playing in guild {GuildId}", guildId);
-            return;
+            return Task.CompletedTask;
         }
 
         state.Cts = new CancellationTokenSource();
@@ -61,6 +73,7 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Starting queue playback in guild {GuildId}", guildId);
 
         _ = RunAdvancementLoopAsync(guildId);
+        return Task.CompletedTask;
     }
 
     public async Task StopAsync(ulong guildId)
@@ -76,16 +89,19 @@ public sealed partial class QueuePlaybackService(
         await ClearActivityAsync();
     }
 
-    public void Skip(ulong guildId)
+    public Task<(PlayQueueItem? Skipped, PlayQueueItem? Next)> SkipAsync(ulong guildId)
     {
-        if (!_states.TryGetValue(guildId, out var state) || !state.IsPlaying)
+        var state = GetState(guildId);
+        if (!state.IsPlaying)
         {
-            logger.LogInformation("Queue is not playing in guild {GuildId}, nothing to skip", guildId);
-            return;
+            logger.LogInformation("Queue is not playing in guild {GuildId}. Cannot skip", guildId);
+            return Task.FromResult(new ValueTuple<PlayQueueItem?, PlayQueueItem?>(null, null));
         }
 
         logger.LogInformation("Skipping current track in guild {GuildId}", guildId);
 
+        var currentItem = state.CurrentItem;
+        var nextItem = state.Items.FirstOrDefault();
         try
         {
             state.SkipCts?.Cancel();
@@ -94,6 +110,8 @@ public sealed partial class QueuePlaybackService(
         {
             // Already disposed.
         }
+
+        return Task.FromResult(new ValueTuple<PlayQueueItem?, PlayQueueItem?>(currentItem, nextItem));
     }
 
     private GuildPlaybackState GetState(ulong guildId)
@@ -171,7 +189,7 @@ public sealed partial class QueuePlaybackService(
     {
         var state = GetState(guildId);
         var item = state.CurrentItem!;
-        var cancellationToken = state.SkipCts?.Token ?? CancellationToken.None;
+        var cancellationToken = state.SkipCts!.Token;
 
         var audioClient = voiceConnectionService.GetConnection(guildId)!;
         if (audioClient is null)

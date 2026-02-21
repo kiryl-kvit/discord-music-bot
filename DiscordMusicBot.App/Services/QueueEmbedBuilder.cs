@@ -111,22 +111,6 @@ public static class QueueEmbedBuilder
         return builder.Build();
     }
 
-    public static Embed BuildNowPlayingEmbed(PlayQueueItem item)
-    {
-        var duration = item.Duration is not null
-            ? DateFormatter.FormatTime(item.Duration.Value)
-            : UnknownDuration;
-
-        var builder = new EmbedBuilder()
-            .WithTitle("Now Playing")
-            .WithDescription($"**{item.Title}**")
-            .WithColor(Color.Blue)
-            .AddField("Artist", item.Author ?? UnknownAuthor, inline: true)
-            .AddField("Duration", duration, inline: true);
-
-        return builder.Build();
-    }
-
     public static Embed BuildSkippedEmbed(PlayQueueItem? skippedItem, PlayQueueItem? nextItem)
     {
         var builder = new EmbedBuilder()
