@@ -42,9 +42,16 @@ public sealed partial class QueuePlaybackService(
             .ToArray());
     }
 
-    public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items)
+    public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items,
+        IMessageChannel? feedbackChannel = null)
     {
         var state = GetState(guildId);
+
+        if (feedbackChannel is not null)
+        {
+            state.FeedbackChannel = feedbackChannel;
+        }
+
         state.WithItems(list => list.AddRange(items));
 
         if (state is { IsPlaying: false, IsConnected: true })
@@ -115,9 +122,14 @@ public sealed partial class QueuePlaybackService(
         await DisposePrefetchedTrackAsync(state);
     }
 
-    public Task StartAsync(ulong guildId)
+    public Task StartAsync(ulong guildId, IMessageChannel? feedbackChannel = null)
     {
         var state = GetState(guildId);
+
+        if (feedbackChannel is not null)
+        {
+            state.FeedbackChannel = feedbackChannel;
+        }
 
         if (state.IsPlaying)
         {
@@ -247,6 +259,9 @@ public sealed partial class QueuePlaybackService(
                 {
                     logger.LogInformation("Track '{Title}' has no duration, skipping to next in guild {GuildId}",
                         item.Title, guildId);
+                    await SendFeedbackAsync(guildId,
+                        $"Skipping '{item.Title}'",
+                        "No duration available for this track.");
                     continue;
                 }
 
@@ -261,6 +276,18 @@ public sealed partial class QueuePlaybackService(
                                                          && !pauseToken.IsCancellationRequested)
                 {
                     logger.LogInformation("Track '{Title}' was skipped in guild {GuildId}", item.Title, guildId);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Error during playback of '{Title}' in guild {GuildId}. " +
+                                          "Skipping to next track.", item.Title, guildId);
+                    await SendFeedbackAsync(guildId,
+                        $"Error playing '{item.Title}'",
+                        "An error occurred during playback. Skipping to next track.");
                 }
                 finally
                 {
@@ -282,6 +309,9 @@ public sealed partial class QueuePlaybackService(
             state.CurrentItem = null;
             await DisposePrefetchedTrackAsync(state);
             await ClearActivityAsync();
+            await SendFeedbackAsync(guildId,
+                "Playback stopped unexpectedly",
+                "An unexpected error interrupted playback. Use `/queue resume` to restart.");
         }
     }
 
@@ -317,13 +347,16 @@ public sealed partial class QueuePlaybackService(
         {
             await DisposePrefetchedTrackAsync(state);
 
-            var acquiredStream = await AcquireAudioStreamAsync(item, startFrom, streamCts.Token);
-            if (acquiredStream is null)
+            var streamResult = await AcquireAudioStreamAsync(item, startFrom, streamCts.Token);
+            if (!streamResult.IsSuccess)
             {
+                await SendFeedbackAsync(guildId,
+                    $"Failed to play '{item.Title}'",
+                    $"{streamResult.ErrorMessage}. Skipping to next track.");
                 return;
             }
 
-            pcmAudioStream = acquiredStream;
+            pcmAudioStream = streamResult.Value!;
         }
 
         await using (pcmAudioStream)
@@ -399,7 +432,7 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private async Task<PcmAudioStream?> AcquireAudioStreamAsync(
+    private async Task<Result<PcmAudioStream>> AcquireAudioStreamAsync(
         PlayQueueItem item, TimeSpan startFrom, CancellationToken cancellationToken)
     {
         var provider = audioStreamProviderFactory.GetProvider(item.Url);
@@ -407,16 +440,14 @@ public sealed partial class QueuePlaybackService(
         var streamResult = await provider.GetAudioStreamAsync(item.Url, startFrom: startFrom,
             cancellationToken: cancellationToken);
 
-        if (streamResult.IsSuccess)
+        if (!streamResult.IsSuccess)
         {
-            return streamResult.Value!;
+            logger.LogWarning(
+                "Guild {GuildId}. Failed to get audio stream for '{Title}': {Error}. Skipping.",
+                item.GuildId, item.Title, streamResult.ErrorMessage);
         }
 
-        logger.LogWarning(
-            "Guild {GuildId}. Failed to get audio stream for '{Title}': {Error}. Skipping.",
-            item.GuildId, item.Title, streamResult.ErrorMessage);
-
-        return null;
+        return streamResult;
     }
 
     private async Task PrefetchTrackAsync(ulong guildId, CancellationToken cancellationToken)
@@ -440,13 +471,13 @@ public sealed partial class QueuePlaybackService(
         {
             logger.LogInformation("Prefetching audio for '{Title}' in guild {GuildId}", nextItem.Title, guildId);
 
-            var stream = await AcquireAudioStreamAsync(nextItem, TimeSpan.Zero, cancellationToken);
-            if (stream is null)
+            var streamResult = await AcquireAudioStreamAsync(nextItem, TimeSpan.Zero, cancellationToken);
+            if (!streamResult.IsSuccess)
             {
                 return;
             }
 
-            state.PrefetchedTrack = new PlaybackTrack { ItemId = nextItem.Id, Stream = stream };
+            state.PrefetchedTrack = new PlaybackTrack { ItemId = nextItem.Id, Stream = streamResult.Value! };
 
             logger.LogInformation("Prefetched audio for '{Title}' in guild {GuildId}", nextItem.Title, guildId);
         }
@@ -541,6 +572,30 @@ public sealed partial class QueuePlaybackService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to clear activity status");
+        }
+    }
+
+    private async Task SendFeedbackAsync(ulong guildId, string title, string description)
+    {
+        var channel = GetState(guildId).FeedbackChannel;
+        if (channel is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var embed = new EmbedBuilder()
+                .WithColor(Color.Red)
+                .WithTitle(title)
+                .WithDescription(description)
+                .Build();
+
+            await channel.SendMessageAsync(embed: embed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send playback feedback to channel in guild {GuildId}", guildId);
         }
     }
 }

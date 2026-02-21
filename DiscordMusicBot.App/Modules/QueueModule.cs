@@ -44,7 +44,7 @@ public class QueueModule(
         var queueItems = musicItemsResult.Value!
             .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
 
-        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems);
+        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
 
         logger.LogInformation("User {UserId} enqueued {Url} in guild {GuildId}", userId, url, guildId);
 
@@ -91,7 +91,7 @@ public class QueueModule(
 
         await DeferAsync(ephemeral: true);
 
-        await queuePlaybackService.StartAsync(guildId);
+        await queuePlaybackService.StartAsync(guildId, Context.Channel);
 
         await ModifyOriginalResponseAsync(props => props.Content = "Queue started.");
     }
