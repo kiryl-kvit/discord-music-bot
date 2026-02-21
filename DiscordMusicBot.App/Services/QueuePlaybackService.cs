@@ -34,16 +34,16 @@ public sealed partial class QueuePlaybackService(
     public IReadOnlyCollection<PlayQueueItem> GetQueueItems(ulong guildId, int skip = 0, int take = 10)
     {
         var state = GetState(guildId);
-        return state.Items
+        return state.WithItems(items => items
             .Skip(skip)
             .Take(take)
-            .ToArray();
+            .ToArray());
     }
 
     public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items)
     {
         var state = GetState(guildId);
-        state.Items.AddRange(items);
+        state.WithItems(list => list.AddRange(items));
 
         if (state is { IsPlaying: false, IsConnected: true })
         {
@@ -61,7 +61,8 @@ public sealed partial class QueuePlaybackService(
         }
 
         state.ResumePosition = TimeSpan.Zero;
-        state.Items.Clear();
+        state.ResumeItemId = null;
+        state.WithItems(items => items.Clear());
     }
 
     public Task StartAsync(ulong guildId)
@@ -71,6 +72,13 @@ public sealed partial class QueuePlaybackService(
         if (state.IsPlaying)
         {
             logger.LogInformation("Queue is already playing in guild {GuildId}", guildId);
+            return Task.CompletedTask;
+        }
+
+        var hasItems = state.WithItems(items => items.Count > 0);
+        if (!hasItems)
+        {
+            logger.LogInformation("Queue is empty in guild {GuildId}, nothing to start", guildId);
             return Task.CompletedTask;
         }
 
@@ -98,7 +106,7 @@ public sealed partial class QueuePlaybackService(
 
         if (currentItem is not null)
         {
-            state.Items.Insert(0, currentItem);
+            state.WithItems(items => items.Insert(0, currentItem));
         }
 
         await ClearActivityAsync();
@@ -116,6 +124,7 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Resetting queue playback in guild {GuildId}", guildId);
 
         state.ResumePosition = TimeSpan.Zero;
+        state.ResumeItemId = null;
         CancelPlayback(state);
         await ClearActivityAsync();
     }
@@ -132,8 +141,9 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Skipping current track in guild {GuildId}", guildId);
 
         var currentItem = state.CurrentItem;
-        var nextItem = state.Items.FirstOrDefault();
+        var nextItem = state.WithItems(items => items.FirstOrDefault());
         state.ResumePosition = TimeSpan.Zero;
+        state.ResumeItemId = null;
         try
         {
             state.SkipCts?.Cancel();
@@ -160,7 +170,7 @@ public sealed partial class QueuePlaybackService(
         {
             while (state.IsPlaying && !pauseToken.IsCancellationRequested)
             {
-                state.CurrentItem = state.Items.Pop();
+                state.CurrentItem = state.WithItems(items => items.Pop());
                 var item = state.CurrentItem;
 
                 if (item is null)
@@ -168,6 +178,7 @@ public sealed partial class QueuePlaybackService(
                     logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
 
                     state.ResumePosition = TimeSpan.Zero;
+                    state.ResumeItemId = null;
                     CancelPlayback(state);
                     await ClearActivityAsync();
 
@@ -213,6 +224,7 @@ public sealed partial class QueuePlaybackService(
         {
             logger.LogError(ex, "Unexpected error in queue advancement loop for guild {GuildId}", guildId);
             state.ResumePosition = TimeSpan.Zero;
+            state.ResumeItemId = null;
             CancelPlayback(state);
             state.CurrentItem = null;
             await ClearActivityAsync();
@@ -226,20 +238,23 @@ public sealed partial class QueuePlaybackService(
         var skipToken = state.SkipCts!.Token;
         var pauseToken = state.PauseCts!.Token;
 
-        var audioClient = voiceConnectionService.GetConnection(guildId)!;
+        var audioClient = voiceConnectionService.GetConnection(guildId);
         if (audioClient is null)
         {
-            throw new ArgumentNullException(
+            throw new InvalidOperationException(
                 $"Not in voice channel for guild {guildId}. Cannot play tracks");
         }
 
         var provider = audioStreamProviderFactory.GetProvider(item.Url);
 
-        var startFrom = state.ResumePosition;
+        var startFrom = state.ResumeItemId == item.Id ? state.ResumePosition : TimeSpan.Zero;
         state.ResumePosition = TimeSpan.Zero;
+        state.ResumeItemId = null;
+
+        using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(pauseToken, skipToken);
 
         var streamResult = await provider.GetAudioStreamAsync(item.Url, startFrom: startFrom,
-            cancellationToken: skipToken);
+            cancellationToken: streamCts.Token);
 
         if (!streamResult.IsSuccess)
         {
@@ -290,6 +305,7 @@ public sealed partial class QueuePlaybackService(
                     {
                         state.ResumePosition =
                             startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
+                        state.ResumeItemId = item.Id;
                     }
                 }
             }
