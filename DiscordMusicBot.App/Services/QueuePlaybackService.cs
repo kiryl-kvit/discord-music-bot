@@ -4,6 +4,7 @@ using Discord.Audio;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Extensions;
 using DiscordMusicBot.App.Services.Models;
+using DiscordMusicBot.Core;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
@@ -56,22 +57,22 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    public async Task ShuffleQueueAsync(ulong guildId)
+    public async Task<Result> ShuffleQueueAsync(ulong guildId)
     {
         var state = GetState(guildId);
         var shouldPrefetch = false;
 
-        state.WithItems(items =>
+        var shuffleResult = state.WithItems(items =>
         {
             if (items.Count <= 1)
             {
-                return;
+                return Result.Failure("Not enough items in the queue to shuffle.");
             }
 
             var startIndex = items.Count > 0 && ReferenceEquals(items[0], state.CurrentItem) ? 1 : 0;
             if (items.Count - startIndex <= 1)
             {
-                return;
+                return Result.Failure("Not enough items in the queue to shuffle.");
             }
 
             for (var i = items.Count - 1; i > startIndex; i--)
@@ -81,16 +82,22 @@ public sealed partial class QueuePlaybackService(
             }
 
             shouldPrefetch = true;
+            return Result.Success();
         });
 
-        if (!shouldPrefetch)
+        if (!shuffleResult.IsSuccess)
         {
-            return;
+            return shuffleResult;
         }
 
-        await DisposePrefetchedTrackAsync(state);
+        if (shouldPrefetch)
+        {
+            await DisposePrefetchedTrackAsync(state);
 
-        _ = PrefetchTrackAsync(guildId, CancellationToken.None);
+            _ = PrefetchTrackAsync(guildId, CancellationToken.None);
+        }
+
+        return Result.Success();
     }
 
     public async Task ClearQueueAsync(ulong guildId)

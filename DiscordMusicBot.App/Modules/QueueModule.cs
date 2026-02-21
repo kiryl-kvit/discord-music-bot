@@ -63,7 +63,16 @@ public class QueueModule(
 
         await DeferAsync(ephemeral: true);
 
-        await queuePlaybackService.ShuffleQueueAsync(guildId);
+        var result = await queuePlaybackService.ShuffleQueueAsync(guildId);
+
+        if (!result.IsSuccess)
+        {
+            logger.LogInformation("Failed to shuffle queue in guild {GuildId}: {ErrorMessage}", guildId,
+                result.ErrorMessage);
+            await ModifyOriginalResponseAsync(props =>
+                props.Content = $"Failed to shuffle queue: {result.ErrorMessage}");
+            return;
+        }
 
         logger.LogInformation("Queue shuffled in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
         await ModifyOriginalResponseAsync(props => props.Content = "Queue shuffled.");
