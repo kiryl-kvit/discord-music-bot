@@ -56,6 +56,43 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
+    public async Task ShuffleQueueAsync(ulong guildId)
+    {
+        var state = GetState(guildId);
+        var shouldPrefetch = false;
+
+        state.WithItems(items =>
+        {
+            if (items.Count <= 1)
+            {
+                return;
+            }
+
+            var startIndex = items.Count > 0 && ReferenceEquals(items[0], state.CurrentItem) ? 1 : 0;
+            if (items.Count - startIndex <= 1)
+            {
+                return;
+            }
+
+            for (var i = items.Count - 1; i > startIndex; i--)
+            {
+                var j = Random.Shared.Next(startIndex, i + 1);
+                (items[i], items[j]) = (items[j], items[i]);
+            }
+
+            shouldPrefetch = true;
+        });
+
+        if (!shouldPrefetch)
+        {
+            return;
+        }
+
+        await DisposePrefetchedTrackAsync(state);
+
+        _ = PrefetchTrackAsync(guildId, CancellationToken.None);
+    }
+
     public async Task ClearQueueAsync(ulong guildId)
     {
         var state = GetState(guildId);
