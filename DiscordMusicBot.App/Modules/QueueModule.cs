@@ -44,7 +44,7 @@ public class QueueModule(
         var queueItems = musicItemsResult.Value!
             .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
 
-        queuePlaybackService.EnqueueItems(guildId, queueItems);
+        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems);
 
         logger.LogInformation("User {UserId} enqueued {Url} in guild {GuildId}", userId, url, guildId);
 
@@ -56,8 +56,8 @@ public class QueueModule(
         });
     }
 
-    [SlashCommand("start", "Start or resume queue playback")]
-    public async Task StartAsync()
+    [SlashCommand("resume", "Resume queue playback")]
+    public async Task Resume()
     {
         var guildId = Context.Guild.Id;
 
@@ -83,7 +83,7 @@ public class QueueModule(
             return;
         }
 
-        await queuePlaybackService.StopAsync(guildId);
+        await queuePlaybackService.PauseAsync(guildId);
         await RespondAsync("Queue paused.", ephemeral: true);
     }
 

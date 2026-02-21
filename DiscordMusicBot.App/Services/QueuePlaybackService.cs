@@ -17,6 +17,7 @@ public sealed partial class QueuePlaybackService(
     ILogger<QueuePlaybackService> logger)
 {
     private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
+    private const int PcmBytesPerSecond = 192000; // 48kHz * 16-bit * 2 channels.
 
     private readonly ConcurrentDictionary<ulong, GuildPlaybackState> _states = new();
 
@@ -39,10 +40,15 @@ public sealed partial class QueuePlaybackService(
             .ToArray();
     }
 
-    public void EnqueueItems(ulong guildId, IEnumerable<PlayQueueItem> items)
+    public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items)
     {
         var state = GetState(guildId);
         state.Items.AddRange(items);
+
+        if (state is { IsPlaying: false, IsConnected: true })
+        {
+            await StartAsync(guildId);
+        }
     }
 
     public async Task ClearQueueAsync(ulong guildId)
@@ -51,9 +57,10 @@ public sealed partial class QueuePlaybackService(
 
         if (state.IsPlaying)
         {
-            await StopAsync(guildId);
+            await FullStopAsync(guildId);
         }
 
+        state.ResumePosition = TimeSpan.Zero;
         state.Items.Clear();
     }
 
@@ -67,7 +74,7 @@ public sealed partial class QueuePlaybackService(
             return Task.CompletedTask;
         }
 
-        state.Cts = new CancellationTokenSource();
+        state.PauseCts = new CancellationTokenSource();
         state.IsPlaying = true;
 
         logger.LogInformation("Starting queue playback in guild {GuildId}", guildId);
@@ -76,7 +83,7 @@ public sealed partial class QueuePlaybackService(
         return Task.CompletedTask;
     }
 
-    public async Task StopAsync(ulong guildId)
+    public async Task PauseAsync(ulong guildId)
     {
         if (!_states.TryGetValue(guildId, out var state) || !state.IsPlaying)
         {
@@ -84,8 +91,32 @@ public sealed partial class QueuePlaybackService(
             return;
         }
 
-        logger.LogInformation("Stopping queue playback in guild {GuildId}", guildId);
-        CancelAndReset(state);
+        logger.LogInformation("Pausing queue playback in guild {GuildId}", guildId);
+
+        var currentItem = state.CurrentItem;
+        CancelPlayback(state);
+
+        if (currentItem is not null)
+        {
+            state.Items.Insert(0, currentItem);
+        }
+
+        await ClearActivityAsync();
+    }
+
+    private async Task FullStopAsync(ulong guildId)
+    {
+        var state = GetState(guildId);
+        if (!state.IsPlaying)
+        {
+            logger.LogInformation("Queue is not playing in guild {GuildId}, nothing to stop", guildId);
+            return;
+        }
+
+        logger.LogInformation("Resetting queue playback in guild {GuildId}", guildId);
+
+        state.ResumePosition = TimeSpan.Zero;
+        CancelPlayback(state);
         await ClearActivityAsync();
     }
 
@@ -102,6 +133,7 @@ public sealed partial class QueuePlaybackService(
 
         var currentItem = state.CurrentItem;
         var nextItem = state.Items.FirstOrDefault();
+        state.ResumePosition = TimeSpan.Zero;
         try
         {
             state.SkipCts?.Cancel();
@@ -122,11 +154,11 @@ public sealed partial class QueuePlaybackService(
     private async Task RunAdvancementLoopAsync(ulong guildId)
     {
         var state = GetState(guildId);
-        var cancellationToken = state.Cts!.Token;
+        var pauseToken = state.PauseCts!.Token;
 
         try
         {
-            while (state.IsPlaying && !cancellationToken.IsCancellationRequested)
+            while (state.IsPlaying && !pauseToken.IsCancellationRequested)
             {
                 state.CurrentItem = state.Items.Pop();
                 var item = state.CurrentItem;
@@ -135,7 +167,8 @@ public sealed partial class QueuePlaybackService(
                 {
                     logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
 
-                    CancelAndReset(state);
+                    state.ResumePosition = TimeSpan.Zero;
+                    CancelPlayback(state);
                     await ClearActivityAsync();
 
                     break;
@@ -153,7 +186,7 @@ public sealed partial class QueuePlaybackService(
                     continue;
                 }
 
-                var skipCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var skipCts = CancellationTokenSource.CreateLinkedTokenSource(pauseToken);
                 state.SkipCts = skipCts;
 
                 try
@@ -161,7 +194,7 @@ public sealed partial class QueuePlaybackService(
                     await StreamToVoiceAsync(guildId);
                 }
                 catch (OperationCanceledException) when (skipCts.IsCancellationRequested
-                                                         && !cancellationToken.IsCancellationRequested)
+                                                         && !pauseToken.IsCancellationRequested)
                 {
                     logger.LogInformation("Track '{Title}' was skipped in guild {GuildId}", item.Title, guildId);
                 }
@@ -179,7 +212,8 @@ public sealed partial class QueuePlaybackService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected error in queue advancement loop for guild {GuildId}", guildId);
-            CancelAndReset(state);
+            state.ResumePosition = TimeSpan.Zero;
+            CancelPlayback(state);
             state.CurrentItem = null;
             await ClearActivityAsync();
         }
@@ -189,7 +223,8 @@ public sealed partial class QueuePlaybackService(
     {
         var state = GetState(guildId);
         var item = state.CurrentItem!;
-        var cancellationToken = state.SkipCts!.Token;
+        var skipToken = state.SkipCts!.Token;
+        var pauseToken = state.PauseCts!.Token;
 
         var audioClient = voiceConnectionService.GetConnection(guildId)!;
         if (audioClient is null)
@@ -200,7 +235,11 @@ public sealed partial class QueuePlaybackService(
 
         var provider = audioStreamProviderFactory.GetProvider(item.Url);
 
-        var streamResult = await provider.GetAudioStreamAsync(item.Url, cancellationToken: cancellationToken);
+        var startFrom = state.ResumePosition;
+        state.ResumePosition = TimeSpan.Zero;
+
+        var streamResult = await provider.GetAudioStreamAsync(item.Url, startFrom: startFrom,
+            cancellationToken: skipToken);
 
         if (!streamResult.IsSuccess)
         {
@@ -214,7 +253,8 @@ public sealed partial class QueuePlaybackService(
 
         await using (pcmAudioStream)
         {
-            logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId}", item.Title, guildId);
+            logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId} (from {StartFrom})",
+                item.Title, guildId, startFrom);
 
             var discordStream = state.DiscordPcmStream;
             if (discordStream is null || state.DiscordPcmStreamOwner != audioClient)
@@ -233,11 +273,24 @@ public sealed partial class QueuePlaybackService(
             try
             {
                 var buffer = new byte[PcmBufferSize];
-                int bytesRead;
+                long bytesWritten = 0;
 
-                while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, cancellationToken)) > 0)
+                try
                 {
-                    await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+                    int bytesRead;
+                    while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, skipToken)) > 0)
+                    {
+                        await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), skipToken);
+                        bytesWritten += bytesRead;
+                    }
+                }
+                finally
+                {
+                    if (pauseToken.IsCancellationRequested)
+                    {
+                        state.ResumePosition =
+                            startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -268,7 +321,7 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private static void CancelAndReset(GuildPlaybackState state)
+    private static void CancelPlayback(GuildPlaybackState state)
     {
         state.IsPlaying = false;
 
@@ -281,7 +334,7 @@ public sealed partial class QueuePlaybackService(
         }
 
         SafeCancelAndDispose(ref state.SkipCts);
-        SafeCancelAndDispose(ref state.Cts);
+        SafeCancelAndDispose(ref state.PauseCts);
     }
 
     private static void SafeCancelAndDispose(ref CancellationTokenSource? cts)

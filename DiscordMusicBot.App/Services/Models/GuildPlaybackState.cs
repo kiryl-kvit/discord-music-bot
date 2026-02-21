@@ -9,10 +9,13 @@ public sealed class GuildPlaybackState
     public PlayQueueItem? CurrentItem;
     
     public volatile bool IsPlaying;
+    public volatile bool IsConnected;
     
     public IAudioClient? DiscordPcmStreamOwner;
     public AudioOutStream? DiscordPcmStream;
     
-    public CancellationTokenSource? Cts;
+    public CancellationTokenSource? PauseCts;
     public CancellationTokenSource? SkipCts;
+
+    public TimeSpan ResumePosition;
 }

@@ -9,6 +9,9 @@ public sealed partial class QueuePlaybackService
     {
         logger.LogInformation("Voice connected in guild {GuildId}. Starting the playback", guildId);
 
+        var state = GetState(guildId);
+        state.IsConnected = true;
+
         await StartAsync(guildId);
     }
 
@@ -16,6 +19,9 @@ public sealed partial class QueuePlaybackService
     {
         logger.LogInformation("Voice disconnected in guild {GuildId}. Stopping playback.", guildId);
 
-        await StopAsync(guildId);
+        var state = GetState(guildId);
+        state.IsConnected = false;
+
+        await PauseAsync(guildId);
     }
 }
