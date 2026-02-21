@@ -1,7 +1,6 @@
 using Discord;
 using DiscordMusicBot.Core.Formatters;
 using DiscordMusicBot.Domain.PlayQueue;
-using DiscordMusicBot.Domain.PlayQueue.Dto;
 
 namespace DiscordMusicBot.App.Services;
 
@@ -11,13 +10,8 @@ public static class QueueEmbedBuilder
     private const string UnknownAuthor = "Unknown";
     private const string UnknownDuration = "??:??";
 
-    public static int CalculateTotalPages(int itemCount)
-    {
-        return Math.Max(1, (int)Math.Ceiling(itemCount / (double)PageSize));
-    }
-
-    public static Embed BuildQueueEmbed(IReadOnlyList<PlayQueueItem> items, PlayQueueItem? currentItem,
-        int page, int totalPages)
+    public static Embed BuildQueueEmbed(IReadOnlyCollection<PlayQueueItem> items, PlayQueueItem? currentItem,
+        int page, int pageSize)
     {
         var builder = new EmbedBuilder()
             .WithTitle("Queue")
@@ -34,13 +28,8 @@ public static class QueueEmbedBuilder
         }
         else
         {
-            var lines = items.Select((item, index) => FormatQueueLine(item, page, index));
+            var lines = items.Select((item, index) => FormatQueueLine(item, page, pageSize, index));
             builder.AddField("Up Next", string.Join('\n', lines));
-        }
-
-        if (totalPages > 1)
-        {
-            builder.WithFooter($"Page {page + 1} of {totalPages}");
         }
 
         return builder.Build();
@@ -51,26 +40,26 @@ public static class QueueEmbedBuilder
         return $"{item.Title} - {item.Author ?? UnknownAuthor}";
     }
 
-    private static string FormatQueueLine(PlayQueueItem item, int page, int index)
+    private static string FormatQueueLine(PlayQueueItem item, int page, int pageSize, int index)
     {
-        var position = page * PageSize + index + 1;
+        var position = (page - 1) * pageSize + index + 1;
         var duration = item.Duration is not null
             ? DateFormatter.FormatTime(item.Duration.Value)
             : UnknownDuration;
         return $"`{position}.` **{item.Title}** - {item.Author ?? UnknownAuthor} `[{duration}]`";
     }
 
-    public static MessageComponent BuildQueuePageControls(int page, int totalPages)
+    public static MessageComponent BuildQueuePageControls(int page, bool hasNextPage)
     {
         return new ComponentBuilder()
             .WithButton("Prev", $"queue:page:{page - 1}", ButtonStyle.Secondary,
-                new Emoji("\u25C0\uFE0F"), disabled: page <= 0)
+                new Emoji("\u25C0\uFE0F"), disabled: page <= 1)
             .WithButton("Next", $"queue:page:{page + 1}", ButtonStyle.Secondary,
-                new Emoji("\u25B6\uFE0F"), disabled: page >= totalPages - 1)
+                new Emoji("\u25B6\uFE0F"), disabled: !hasNextPage)
             .Build();
     }
 
-    public static Embed BuildAddedToQueueEmbed(EnqueueItemDto[] items)
+    public static Embed BuildAddedToQueueEmbed(PlayQueueItem[] items)
     {
         var builder = new EmbedBuilder()
             .WithColor(Color.Green);

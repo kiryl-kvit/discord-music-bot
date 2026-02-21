@@ -6,17 +6,15 @@ using DiscordMusicBot.App.Extensions;
 using DiscordMusicBot.App.Services.Models;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Services;
 
 public sealed partial class QueuePlaybackService(
-    IServiceScopeFactory scopeFactory,
     IAudioStreamProviderFactory audioStreamProviderFactory,
     VoiceConnectionService voiceConnectionService,
     DiscordSocketClient discordClient,
-    ILogger<QueuePlaybackService> logger) : IPlayQueueEventListener
+    ILogger<QueuePlaybackService> logger)
 {
     private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
 
@@ -30,6 +28,21 @@ public sealed partial class QueuePlaybackService(
     public PlayQueueItem? GetCurrentItem(ulong guildId)
     {
         return GetState(guildId).CurrentItem;
+    }
+
+    public IReadOnlyCollection<PlayQueueItem> GetQueueItems(ulong guildId, int skip = 0, int take = 10)
+    {
+        var state = GetState(guildId);
+        return state.Items
+            .Skip(skip)
+            .Take(take)
+            .ToArray();
+    }
+
+    public void EnqueueItems(ulong guildId, IEnumerable<PlayQueueItem> items)
+    {
+        var state = GetState(guildId);
+        state.Items.AddRange(items);
     }
 
     public void Start(ulong guildId)
@@ -119,8 +132,6 @@ public sealed partial class QueuePlaybackService(
                 {
                     logger.LogInformation("Track '{Title}' has no duration, skipping to next in guild {GuildId}",
                         item.Title, guildId);
-
-                    await RemoveCurrentItemAsync(guildId);
                     continue;
                 }
 
@@ -141,8 +152,6 @@ public sealed partial class QueuePlaybackService(
                     skipCts.Dispose();
                     state.SkipCts = null;
                 }
-
-                await RemoveCurrentItemAsync(guildId);
             }
         }
         catch (OperationCanceledException)
@@ -155,30 +164,6 @@ public sealed partial class QueuePlaybackService(
             CancelAndReset(state);
             state.CurrentItem = null;
             await ClearActivityAsync();
-        }
-    }
-
-    private async Task RemoveCurrentItemAsync(ulong guildId)
-    {
-        try
-        {
-            var state = GetState(guildId);
-
-            if (state.CurrentItem is null)
-            {
-                return;
-            }
-
-            using var scope = scopeFactory.CreateScope();
-            var repository = scope.ServiceProvider.GetRequiredService<IPlayQueueRepository>();
-            await repository.RemoveAsync(state.CurrentItem.Id);
-
-            state.CurrentItem = null;
-            state.CurrentTrack = null;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to remove current item from queue in guild {GuildId}", guildId);
         }
     }
 

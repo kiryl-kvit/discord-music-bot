@@ -12,23 +12,18 @@ public sealed class PlayQueueItem
     public string? Author { get; private set; }
     public TimeSpan? Duration { get; private set; }
 
-    public long Position { get; private set; }
-
-    public DateTime EnqueuedAtUtc { get; private set; } = DateTime.UtcNow;
-
     private PlayQueueItem()
     {
     }
 
-    public static PlayQueueItem Create(ulong guildId, ulong userId, string url, string title, long position,
-        string? author, TimeSpan? duration)
+    public static PlayQueueItem Create(ulong guildId, ulong userId, string url, string title, string? author,
+        TimeSpan? duration)
     {
         return new PlayQueueItem
         {
             GuildId = guildId,
             UserId = userId,
             Url = url.Trim(),
-            Position = position,
             Title = title,
             Author = author,
             Duration = duration

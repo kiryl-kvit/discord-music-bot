@@ -3,14 +3,12 @@ using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
-using DiscordMusicBot.Domain.PlayQueue.Dto;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Modules;
 
 [Group("queue", "Queue commands")]
 public class QueueModule(
-    IPlayQueueRepository playQueueRepository,
     IUrlProcessorFactory urlProcessorFactory,
     QueuePlaybackService queuePlaybackService,
     ILogger<QueueModule> logger) : InteractionModuleBase
@@ -43,21 +41,14 @@ public class QueueModule(
             return;
         }
 
-        var dtoArray = musicItemsResult.Value!
-            .Select(x => new EnqueueItemDto(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
+        var queueItems = musicItemsResult.Value!
+            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
 
-        var enqueueResult = await playQueueRepository.EnqueueAsync(dtoArray);
-
-        if (!enqueueResult.IsSuccess)
-        {
-            await ModifyOriginalResponseAsync(props => props.Content =
-                $"Failed to enqueue the item: {enqueueResult.ErrorMessage}");
-            return;
-        }
-
-        logger.LogInformation("User {UserId} successfully enqueued {Url} in guild {GuildId}", userId, url, guildId);
-
-        var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(dtoArray);
+        queuePlaybackService.EnqueueItems(guildId, queueItems);
+        
+        logger.LogInformation("User {UserId} enqueued {Url} in guild {GuildId}", userId, url, guildId);
+        
+        var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(queueItems);
         await ModifyOriginalResponseAsync(props =>
         {
             props.Content = null;
@@ -76,17 +67,17 @@ public class QueueModule(
             return;
         }
 
-        var nextItem = await playQueueRepository.PeekAsync(guildId);
-        if (nextItem is null)
-        {
-            await RespondAsync("Queue is empty. Add tracks with `/queue add` first.", ephemeral: true);
-            return;
-        }
-
-        queuePlaybackService.Start(guildId);
-
-        var embed = QueueEmbedBuilder.BuildNowPlayingEmbed(nextItem);
-        await RespondAsync(embed: embed);
+        // var nextItem = await playQueueRepository.PeekAsync(guildId);
+        // if (nextItem is null)
+        // {
+        //     await RespondAsync("Queue is empty. Add tracks with `/queue add` first.", ephemeral: true);
+        //     return;
+        // }
+        //
+        // queuePlaybackService.Start(guildId);
+        //
+        // var embed = QueueEmbedBuilder.BuildNowPlayingEmbed(nextItem);
+        // await RespondAsync(embed: embed);
     }
 
     [SlashCommand("stop", "Pause queue playback")]
@@ -114,10 +105,10 @@ public class QueueModule(
             await queuePlaybackService.StopAsync(guildId);
         }
 
-        await playQueueRepository.ClearAsync(guildId);
-
-        logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
-        await RespondAsync("Queue cleared.", ephemeral: true);
+        // await playQueueRepository.ClearAsync(guildId);
+        //
+        // logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
+        // await RespondAsync("Queue cleared.", ephemeral: true);
     }
 
     [SlashCommand("skip", "Skip the current track")]
@@ -131,13 +122,13 @@ public class QueueModule(
             return;
         }
 
-        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
-        var nextItem = await playQueueRepository.PeekAsync(guildId, skip: 1);
-
-        queuePlaybackService.Skip(guildId);
-
-        var embed = QueueEmbedBuilder.BuildSkippedEmbed(currentItem, nextItem);
-        await RespondAsync(embed: embed);
+        // var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        // var nextItem = await playQueueRepository.PeekAsync(guildId, skip: 1);
+        //
+        // queuePlaybackService.Skip(guildId);
+        //
+        // var embed = QueueEmbedBuilder.BuildSkippedEmbed(currentItem, nextItem);
+        // await RespondAsync(embed: embed);
     }
 
     [SlashCommand("list", "Show the queue")]
@@ -145,19 +136,15 @@ public class QueueModule(
     {
         var guildId = Context.Guild.Id;
 
-        var items = await playQueueRepository.GetAllAsync(guildId);
-        var totalPages = QueueEmbedBuilder.CalculateTotalPages(items.Count);
+        const int pageSize = QueueEmbedBuilder.PageSize;
+        var pageIndex = page - 1;
+        var skip = pageIndex * pageSize;
 
-        var pageIndex = Math.Clamp(page - 1, 0, totalPages - 1);
-
-        var pageItems = items
-            .Skip(pageIndex * QueueEmbedBuilder.PageSize)
-            .Take(QueueEmbedBuilder.PageSize)
-            .ToList();
-
+        var items = queuePlaybackService.GetQueueItems(guildId, skip, take: pageSize);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, pageIndex, totalPages);
-        var components = QueueEmbedBuilder.BuildQueuePageControls(pageIndex, totalPages);
+
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(items, currentItem, page, pageSize);
+        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage: items.Count == pageSize);
 
         await RespondAsync(embed: embed, components: components);
     }

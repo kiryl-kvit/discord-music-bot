@@ -20,23 +20,4 @@ public sealed partial class QueuePlaybackService
         GetState(guildId).IsConnected = false;
         await StopAsync(guildId);
     }
-
-    public Task OnItemsAddedAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items)
-    {
-        var state = GetState(guildId);
-        state.Items.AddRange(items);
-        state.Items = state.Items.OrderBy(x => x.Position).ToList();
-
-        if (state.IsConnected)
-        {
-            Start(guildId);
-        }
-        
-        return Task.CompletedTask;
-    }
-
-    public Task OnItemsRemovedAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items)
-    {
-        return Task.CompletedTask;
-    }
 }

@@ -1,31 +1,24 @@
 using Discord.Interactions;
 using DiscordMusicBot.App.Services;
-using DiscordMusicBot.Domain.PlayQueue;
 
 namespace DiscordMusicBot.App.Modules;
 
-public class QueuePaginationModule(
-    IPlayQueueRepository playQueueRepository,
-    QueuePlaybackService playbackService) : InteractionModuleBase
+public class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : InteractionModuleBase
 {
     [ComponentInteraction("queue:page:*")]
     public async Task HandlePageAsync(int page)
     {
         var guildId = Context.Guild.Id;
 
-        var items = await playQueueRepository.GetAllAsync(guildId);
-        var totalPages = QueueEmbedBuilder.CalculateTotalPages(items.Count);
+        const int pageSize = QueueEmbedBuilder.PageSize;
+        var pageIndex = page - 1;
+        var skip = pageIndex * pageSize;
 
-        var pageIndex = Math.Clamp(page, 0, totalPages - 1);
+        var items = queuePlaybackService.GetQueueItems(guildId, skip, take: pageSize);
+        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
 
-        var pageItems = items
-            .Skip(pageIndex * QueueEmbedBuilder.PageSize)
-            .Take(QueueEmbedBuilder.PageSize)
-            .ToList();
-
-        var currentItem = playbackService.GetCurrentItem(guildId);
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, pageIndex, totalPages);
-        var components = QueueEmbedBuilder.BuildQueuePageControls(pageIndex, totalPages);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(items, currentItem, page, pageSize);
+        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage: items.Count == pageSize);
 
         await ((Discord.IComponentInteraction)Context.Interaction).UpdateAsync(msg =>
         {

@@ -1,7 +1,6 @@
 <Solution>
   <Project Path="DiscordMusicBot.App/DiscordMusicBot.App.csproj" />
   <Project Path="DiscordMusicBot.Domain/DiscordMusicBot.Domain.csproj" />
-  <Project Path="DiscordMusicBot.DataAccess/DiscordMusicBot.DataAccess.csproj" />
   <Project Path="DiscordMusicBot.Core/DiscordMusicBot.Core.csproj" />
   <Folder Name="/Solution Items/">
     <File Path="README.md" />
@@ -9,6 +8,7 @@
     <File Path="Dockerfile" />
     <File Path=".dockerignore" />
   </Folder>
+  <Folder Name="/Solution Items/.github/" />
   <Folder Name="/Solution Items/.github/workflows/">
     <File Path=".github/workflows/ci.yml" />
     <File Path=".github/workflows/draft-release.yml" />
