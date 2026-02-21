@@ -5,15 +5,10 @@ using DiscordMusicBot.App.Options;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Options;
-using DiscordMusicBot.DataAccess;
-using DiscordMusicBot.DataAccess.Options;
-using DiscordMusicBot.DataAccess.PlayQueue;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Processors;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
-using DiscordMusicBot.Domain.PlayQueue;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -27,7 +22,6 @@ public static class ServicesConfiguration
     public static IServiceCollection ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
         services.ConfigureBotOptions(configuration)
-            .ConfigureDatabase(configuration)
             .ConfigureDiscordDotNet();
 
         services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SupportedSources.YoutubeKey);
@@ -54,23 +48,6 @@ public static class ServicesConfiguration
                 .Validate(o => o.PlaylistLimit > 0, "MusicSources:PlaylistLimit must be greater than 0.")
                 .ValidateOnStart();
 
-            return services;
-        }
-
-        private IServiceCollection ConfigureDatabase(IConfiguration configuration)
-        {
-            services.BindOptions<SqliteDatabaseOptions>(configuration, SqliteDatabaseOptions.SectionName)
-                .Validate(o => !string.IsNullOrWhiteSpace(o.DbFilePath), "SqliteDatabase:DbFilePath is required.")
-                .ValidateOnStart();
-
-            services.AddDbContext<MusicBotDbContext>((sp, options) =>
-            {
-                var dbOptions = sp.GetRequiredService<IOptions<SqliteDatabaseOptions>>().Value;
-                options.UseSqlite($"Data Source={dbOptions.DbFilePath}");
-            });
-
-            services.AddHostedService<DbInitializerHostedService>();
-            services.AddScoped<IPlayQueueRepository, PlayQueueRepository>();
             return services;
         }
 

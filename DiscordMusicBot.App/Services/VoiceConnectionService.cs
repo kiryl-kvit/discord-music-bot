@@ -46,6 +46,33 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         return audioClient;
     }
 
+    public async Task LeaveAsync(IVoiceChannel channel)
+    {
+        var guildId = channel.GuildId;
+
+        if (_connections.TryRemove(guildId, out var existing))
+        {
+            try
+            {
+                await existing.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error stopping existing audio client for guild {GuildId}", guildId);
+            }
+        }
+
+        logger.LogInformation("Leaving voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
+            channel.Name, channel.Id, guildId);
+
+        await channel.DisconnectAsync();
+
+        logger.LogInformation("Disconnected from voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
+            channel.Name, channel.Id, guildId);
+
+        await NotifyDisconnectedAsync(guildId);
+    }
+
     private async Task NotifyConnectedAsync(ulong guildId)
     {
         if (Connected is not null)

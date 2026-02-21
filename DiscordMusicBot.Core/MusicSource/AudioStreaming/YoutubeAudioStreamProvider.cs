@@ -1,12 +1,10 @@
 using System.IO.Pipelines;
-using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using FFMpegCore;
 using FFMpegCore.Pipes;
 using Microsoft.Extensions.Logging;
 using YoutubeExplode;
 using YoutubeExplode.Videos;
-using YoutubeExplode.Videos.Streams;
 
 namespace DiscordMusicBot.Core.MusicSource.AudioStreaming;
 

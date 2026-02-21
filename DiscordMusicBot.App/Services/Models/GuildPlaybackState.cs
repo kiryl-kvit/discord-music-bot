@@ -5,14 +5,36 @@ namespace DiscordMusicBot.App.Services.Models;
 
 public sealed class GuildPlaybackState
 {
-    public volatile bool IsPlaying;
+    private readonly Lock _itemsLock = new();
+    private readonly List<PlayQueueItem> _items = [];
+
     public PlayQueueItem? CurrentItem;
-    public DateTime? TrackStartedAtUtc;
-    public TimeSpan ElapsedBeforePause;
-    public CancellationTokenSource? Cts;
-    public CancellationTokenSource? SkipCts;
-    public TaskCompletionSource? VoiceConnectedTcs;
-    public PrefetchedTrack? Prefetch;
-    public AudioOutStream? DiscordPcmStream;
+
+    public volatile bool IsPlaying;
+    public volatile bool IsConnected;
+
     public IAudioClient? DiscordPcmStreamOwner;
+    public AudioOutStream? DiscordPcmStream;
+
+    public CancellationTokenSource? PauseCts;
+    public CancellationTokenSource? SkipCts;
+
+    public TimeSpan ResumePosition;
+    public long? ResumeItemId;
+
+    public T WithItems<T>(Func<List<PlayQueueItem>, T> action)
+    {
+        lock (_itemsLock)
+        {
+            return action(_items);
+        }
+    }
+
+    public void WithItems(Action<List<PlayQueueItem>> action)
+    {
+        lock (_itemsLock)
+        {
+            action(_items);
+        }
+    }
 }

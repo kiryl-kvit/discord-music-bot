@@ -29,7 +29,6 @@ Create a `.env` file in `DiscordMusicBot.App/`:
 BOT_TOKEN=your_bot_token
 APP_ID=your_application_id
 PUBLIC_KEY=your_public_key
-DB_FILE_PATH=database.db
 PLAYLIST_LIMIT=50
 ```
 
@@ -104,12 +103,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    volumes:
-      - bot-data:/app/data
     network_mode: host
-
-volumes:
-  bot-data:
 ```
 
 Create a `.env` file in the same directory:
@@ -118,11 +112,8 @@ Create a `.env` file in the same directory:
 BOT_TOKEN=your_bot_token
 APP_ID=your_application_id
 PUBLIC_KEY=your_public_key
-DB_FILE_PATH=/app/data/database.db
 PLAYLIST_LIMIT=50
 ```
-
-> **Note:** `DB_FILE_PATH` must use a path inside the container. The `/app/data` directory is backed by a named volume, so the database persists across container restarts.
 
 Then run:
 
@@ -135,8 +126,7 @@ docker compose up -d
 ```
 DiscordMusicBot.App/          # Startup, Discord interactions, slash commands
 DiscordMusicBot.Core/         # Business logic, audio streaming, URL processing
-DiscordMusicBot.Domain/       # Domain interfaces and models
-DiscordMusicBot.DataAccess/   # EF Core SQLite persistence
+DiscordMusicBot.Domain/       # Domain models
 ```
 
 ## Third-Party Licenses

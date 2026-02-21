@@ -10,8 +10,4 @@
     <ProjectReference Include="..\DiscordMusicBot.Core\DiscordMusicBot.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="UrlMetadata\" />
-  </ItemGroup>
-
 </Project>

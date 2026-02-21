@@ -1,17 +1,14 @@
-using Discord;
 using Discord.Interactions;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
-using DiscordMusicBot.Domain.PlayQueue.Dto;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Modules;
 
 [Group("queue", "Queue commands")]
 public class QueueModule(
-    IPlayQueueRepository playQueueRepository,
     IUrlProcessorFactory urlProcessorFactory,
     QueuePlaybackService queuePlaybackService,
     ILogger<QueueModule> logger) : InteractionModuleBase
@@ -44,21 +41,14 @@ public class QueueModule(
             return;
         }
 
-        var dtoArray = musicItemsResult.Value!
-            .Select(x => new EnqueueItemDto(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
+        var queueItems = musicItemsResult.Value!
+            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
 
-        var enqueueResult = await playQueueRepository.EnqueueAsync(dtoArray);
+        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems);
 
-        if (!enqueueResult.IsSuccess)
-        {
-            await ModifyOriginalResponseAsync(props => props.Content =
-                $"Failed to enqueue the item: {enqueueResult.ErrorMessage}");
-            return;
-        }
+        logger.LogInformation("User {UserId} enqueued {Url} in guild {GuildId}", userId, url, guildId);
 
-        logger.LogInformation("User {UserId} successfully enqueued {Url} in guild {GuildId}", userId, url, guildId);
-
-        var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(dtoArray);
+        var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(queueItems);
         await ModifyOriginalResponseAsync(props =>
         {
             props.Content = null;
@@ -66,8 +56,8 @@ public class QueueModule(
         });
     }
 
-    [SlashCommand("start", "Start or resume queue playback")]
-    public async Task StartAsync()
+    [SlashCommand("resume", "Resume queue playback")]
+    public async Task Resume()
     {
         var guildId = Context.Guild.Id;
 
@@ -77,21 +67,15 @@ public class QueueModule(
             return;
         }
 
-        var nextItem = await playQueueRepository.PeekAsync(guildId);
-        if (nextItem is null)
-        {
-            await RespondAsync("Queue is empty. Add tracks with `/queue add` first.", ephemeral: true);
-            return;
-        }
+        await DeferAsync(ephemeral: true);
 
         await queuePlaybackService.StartAsync(guildId);
 
-        var embed = QueueEmbedBuilder.BuildNowPlayingEmbed(nextItem);
-        await RespondAsync(embed: embed);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue started.");
     }
 
-    [SlashCommand("stop", "Pause queue playback")]
-    public async Task StopAsync()
+    [SlashCommand("pause", "Pause queue playback")]
+    public async Task PauseAsync()
     {
         var guildId = Context.Guild.Id;
 
@@ -101,8 +85,10 @@ public class QueueModule(
             return;
         }
 
-        await queuePlaybackService.StopAsync(guildId);
-        await RespondAsync("Queue paused.", ephemeral: true);
+        await DeferAsync(ephemeral: true);
+
+        await queuePlaybackService.PauseAsync(guildId);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue paused.");
     }
 
     [SlashCommand("clear", "Clear all items from the queue")]
@@ -110,15 +96,12 @@ public class QueueModule(
     {
         var guildId = Context.Guild.Id;
 
-        if (queuePlaybackService.IsPlaying(guildId))
-        {
-            await queuePlaybackService.StopAsync(guildId);
-        }
+        await DeferAsync(ephemeral: true);
 
-        await playQueueRepository.ClearAsync(guildId);
+        await queuePlaybackService.ClearQueueAsync(guildId);
 
         logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
-        await RespondAsync("Queue cleared.", ephemeral: true);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue cleared.");
     }
 
     [SlashCommand("skip", "Skip the current track")]
@@ -132,33 +115,29 @@ public class QueueModule(
             return;
         }
 
-        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
-        var nextItem = await playQueueRepository.PeekAsync(guildId, skip: 1);
+        await DeferAsync();
 
-        queuePlaybackService.Skip(guildId);
-
-        var embed = QueueEmbedBuilder.BuildSkippedEmbed(currentItem, nextItem);
-        await RespondAsync(embed: embed);
+        var (skipped, next) = await queuePlaybackService.SkipAsync(guildId);
+        
+        var embed = QueueEmbedBuilder.BuildSkippedEmbed(skipped, next);
+        await ModifyOriginalResponseAsync(props => props.Embed = embed);
     }
 
     [SlashCommand("list", "Show the queue")]
-    public async Task ListAsync(int page = 1)
+    public async Task ListAsync([MinValue(1)] int page = 1)
     {
         var guildId = Context.Guild.Id;
 
-        var items = await playQueueRepository.GetAllAsync(guildId);
-        var totalPages = QueueEmbedBuilder.CalculateTotalPages(items.Count);
+        page = Math.Max(1, page);
+        const int pageSize = QueueEmbedBuilder.PageSize;
+        var pageIndex = page - 1;
+        var skip = pageIndex * pageSize;
 
-        var pageIndex = Math.Clamp(page - 1, 0, totalPages - 1);
-
-        var pageItems = items
-            .Skip(pageIndex * QueueEmbedBuilder.PageSize)
-            .Take(QueueEmbedBuilder.PageSize)
-            .ToList();
-
+        var items = queuePlaybackService.GetQueueItems(guildId, skip, take: pageSize);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, pageIndex, totalPages);
-        var components = QueueEmbedBuilder.BuildQueuePageControls(pageIndex, totalPages);
+
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(items, currentItem, page, pageSize);
+        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage: items.Count == pageSize);
 
         await RespondAsync(embed: embed, components: components);
     }

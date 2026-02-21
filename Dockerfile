@@ -6,7 +6,6 @@ COPY Directory.Build.props .
 COPY DiscordMusicBot.App/DiscordMusicBot.App.csproj DiscordMusicBot.App/
 COPY DiscordMusicBot.Core/DiscordMusicBot.Core.csproj DiscordMusicBot.Core/
 COPY DiscordMusicBot.Domain/DiscordMusicBot.Domain.csproj DiscordMusicBot.Domain/
-COPY DiscordMusicBot.DataAccess/DiscordMusicBot.DataAccess.csproj DiscordMusicBot.DataAccess/
 
 RUN dotnet restore DiscordMusicBot.slnx
 
