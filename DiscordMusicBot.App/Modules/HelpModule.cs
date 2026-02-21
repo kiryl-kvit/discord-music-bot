@@ -24,6 +24,7 @@ public class HelpModule : InteractionModuleBase
             .AddField("/queue add `<url>`", "Add a YouTube video or playlist to the queue.", inline: false)
             .AddField("/queue resume", "Resume queue playback.", inline: false)
             .AddField("/queue pause", "Pause queue playback.", inline: false)
+            .AddField("/queue shuffle", "Shuffle the current queue.", inline: false)
             .AddField("/queue skip", "Skip the current track.", inline: false)
             .AddField("/queue list `[page]`", "Show the current queue with pagination.", inline: false)
             .AddField("/queue clear", "Clear all items from the queue.", inline: false)
