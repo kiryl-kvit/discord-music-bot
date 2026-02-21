@@ -1,3 +1,4 @@
+using Discord;
 using Discord.Audio;
 using DiscordMusicBot.Domain.PlayQueue;
 
@@ -23,6 +24,8 @@ public sealed class GuildPlaybackState
     public long? ResumeItemId;
 
     public PlaybackTrack? PrefetchedTrack;
+
+    public IMessageChannel? FeedbackChannel;
 
     public T WithItems<T>(Func<List<PlayQueueItem>, T> action)
     {
