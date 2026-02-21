@@ -26,6 +26,7 @@ var host = Host.CreateDefaultBuilder(args)
             ["BotSettings:AppId"] = Environment.GetEnvironmentVariable("APP_ID"),
             ["BotSettings:PublicKey"] = Environment.GetEnvironmentVariable("PUBLIC_KEY"),
             ["MusicSources:PlaylistLimit"] = Environment.GetEnvironmentVariable("PLAYLIST_LIMIT"),
+            ["MusicSources:Volume"] = Environment.GetEnvironmentVariable("VOLUME"),
         };
         config.AddInMemoryCollection(envValues.Where(kv => kv.Value is not null));
     })

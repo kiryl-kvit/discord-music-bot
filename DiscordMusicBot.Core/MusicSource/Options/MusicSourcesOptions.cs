@@ -5,4 +5,6 @@ public sealed class MusicSourcesOptions
     public const string SectionName = "MusicSources";
 
     public int PlaylistLimit { get; init; } = 50;
+
+    public double Volume { get; init; } = 1.0;
 }
