@@ -67,9 +67,11 @@ public class QueueModule(
             return;
         }
 
+        await DeferAsync(ephemeral: true);
+
         await queuePlaybackService.StartAsync(guildId);
 
-        await RespondAsync("Queue started.", ephemeral: true);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue started.");
     }
 
     [SlashCommand("pause", "Pause queue playback")]
@@ -83,8 +85,10 @@ public class QueueModule(
             return;
         }
 
+        await DeferAsync(ephemeral: true);
+
         await queuePlaybackService.PauseAsync(guildId);
-        await RespondAsync("Queue paused.", ephemeral: true);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue paused.");
     }
 
     [SlashCommand("clear", "Clear all items from the queue")]
@@ -92,10 +96,12 @@ public class QueueModule(
     {
         var guildId = Context.Guild.Id;
 
+        await DeferAsync(ephemeral: true);
+
         await queuePlaybackService.ClearQueueAsync(guildId);
 
         logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
-        await RespondAsync("Queue cleared.", ephemeral: true);
+        await ModifyOriginalResponseAsync(props => props.Content = "Queue cleared.");
     }
 
     [SlashCommand("skip", "Skip the current track")]
@@ -109,10 +115,12 @@ public class QueueModule(
             return;
         }
 
+        await DeferAsync();
+
         var (skipped, next) = await queuePlaybackService.SkipAsync(guildId);
         
         var embed = QueueEmbedBuilder.BuildSkippedEmbed(skipped, next);
-        await RespondAsync(embed: embed);
+        await ModifyOriginalResponseAsync(props => props.Embed = embed);
     }
 
     [SlashCommand("list", "Show the queue")]
