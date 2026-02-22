@@ -109,9 +109,20 @@ public static class ServicesConfiguration
             var clientId = section[nameof(SpotifyOptions.ClientId)];
             var clientSecret = section[nameof(SpotifyOptions.ClientSecret)];
 
-            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+            var hasClientId = !string.IsNullOrWhiteSpace(clientId);
+            var hasClientSecret = !string.IsNullOrWhiteSpace(clientSecret);
+
+            if (!hasClientId && !hasClientSecret)
             {
                 return services;
+            }
+
+            if (!hasClientId || !hasClientSecret)
+            {
+                var missing = !hasClientId ? nameof(SpotifyOptions.ClientId) : nameof(SpotifyOptions.ClientSecret);
+                throw new InvalidOperationException(
+                    $"Spotify is partially configured: '{SpotifyOptions.SectionName}:{missing}' is missing. " +
+                    "Provide both ClientId and ClientSecret, or remove both to disable Spotify.");
             }
 
             SupportedSources.Register(SupportedSources.SpotifyKey);
