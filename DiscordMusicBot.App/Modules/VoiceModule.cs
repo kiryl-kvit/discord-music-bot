@@ -1,5 +1,6 @@
 using Discord;
 using Discord.Interactions;
+using Discord.WebSocket;
 using DiscordMusicBot.App.Services;
 using Microsoft.Extensions.Logging;
 
@@ -17,7 +18,21 @@ public class VoiceModule(
 
         if (voiceChannel is null)
         {
-            await RespondAsync("You must be in a voice channel first. Join a voice channel and try again.",
+            await RespondAsync(
+                "You must be in a voice channel first. " +
+                "If you are in a private voice channel, make sure I have the **View Channel** permission on it.",
+                ephemeral: true);
+            return;
+        }
+
+        var botUser = ((SocketGuild)Context.Guild).CurrentUser;
+        var permissions = botUser.GetPermissions(voiceChannel);
+
+        if (!permissions.Connect || !permissions.Speak)
+        {
+            await RespondAsync(
+                "I don't have permission to connect or speak in that voice channel. " +
+                "Please grant me the **Connect** and **Speak** permissions on the channel.",
                 ephemeral: true);
             return;
         }
@@ -48,7 +63,9 @@ public class VoiceModule(
 
         if (voiceChannel is null)
         {
-            await RespondAsync("You must be in a voice channel first. Join a voice channel and try again.",
+            await RespondAsync(
+                "You must be in a voice channel first. " +
+                "If you are in a private voice channel, make sure I have the **View Channel** permission on it.",
                 ephemeral: true);
             return;
         }

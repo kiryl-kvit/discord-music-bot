@@ -32,7 +32,19 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         logger.LogInformation("Joining voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
 
-        var audioClient = await channel.ConnectAsync(selfDeaf: true);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        IAudioClient audioClient;
+
+        try
+        {
+            audioClient = await channel.ConnectAsync(selfDeaf: true).WaitAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new TimeoutException(
+                $"Timed out connecting to voice channel '{channel.Name}' ({channel.Id}). " +
+                "This usually means the bot lacks the Connect permission on the channel.");
+        }
 
         audioClient.Disconnected += exception => OnAudioClientDisconnected(guildId, exception);
 
