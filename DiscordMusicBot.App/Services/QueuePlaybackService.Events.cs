@@ -1,4 +1,3 @@
-using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Services;
