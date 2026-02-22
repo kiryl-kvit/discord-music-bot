@@ -9,6 +9,7 @@ using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Processors;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
+using DiscordMusicBot.Core.MusicSource.Spotify;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -30,6 +31,8 @@ public static class ServicesConfiguration
 
         services.AddKeyedSingleton<IAudioStreamProvider, YoutubeAudioStreamProvider>(SupportedSources.YoutubeKey);
         services.AddSingleton<IAudioStreamProviderFactory, AudioStreamProviderFactory>();
+
+        services.ConfigureSpotify(configuration);
 
         return services;
     }
@@ -98,6 +101,30 @@ public static class ServicesConfiguration
         {
             return services.AddOptions<TOptions>()
                 .Bind(configuration.GetSection(sectionName));
+        }
+
+        private IServiceCollection ConfigureSpotify(IConfiguration configuration)
+        {
+            var section = configuration.GetSection(SpotifyOptions.SectionName);
+            var clientId = section[nameof(SpotifyOptions.ClientId)];
+            var clientSecret = section[nameof(SpotifyOptions.ClientSecret)];
+
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+            {
+                return services;
+            }
+
+            SupportedSources.Register(SupportedSources.SpotifyKey);
+
+            services.BindOptions<SpotifyOptions>(configuration, SpotifyOptions.SectionName)
+                .Validate(o => !string.IsNullOrWhiteSpace(o.ClientId), "Spotify:ClientId is required.")
+                .Validate(o => !string.IsNullOrWhiteSpace(o.ClientSecret), "Spotify:ClientSecret is required.")
+                .ValidateOnStart();
+
+            services.AddSingleton<SpotifyClientProvider>();
+            services.AddKeyedScoped<IUrlProcessor, SpotifyUrlProcessor>(SupportedSources.SpotifyKey);
+
+            return services;
         }
     }
 }

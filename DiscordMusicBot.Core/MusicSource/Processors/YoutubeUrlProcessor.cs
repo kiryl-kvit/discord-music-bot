@@ -1,6 +1,7 @@
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Options;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
+using DiscordMusicBot.Core.MusicSource.Youtube;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YoutubeExplode;
@@ -108,7 +109,7 @@ public sealed class YoutubeUrlProcessor(
 
     private static MusicSource ToMusicSource(IVideo video)
     {
-        var url = $"https://www.youtube.com/watch?v={video.Id}";
+        var url = YoutubeHelpers.VideoUrl(video.Id);
         var author = video.Author?.ChannelTitle;
         return new MusicSource(video.Title, url, author, video.Duration);
     }

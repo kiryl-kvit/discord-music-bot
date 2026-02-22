@@ -3,16 +3,39 @@ namespace DiscordMusicBot.Core.Constants;
 public static class SupportedSources
 {
     public const string YoutubeKey = "youtube";
+    public const string SpotifyKey = "spotify";
 
     private sealed record SourceDefinition(string Key, string Name, string[] Hosts, string[] ExampleHosts);
 
-    private static readonly SourceDefinition[] Sources =
-    [
-        new(Key: YoutubeKey,
+    private static readonly Dictionary<string, SourceDefinition> AllSources = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [YoutubeKey] = new SourceDefinition(Key: YoutubeKey,
             Name: "YouTube",
             Hosts: ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"],
             ExampleHosts: ["youtube.com", "music.youtube.com", "youtu.be"]),
-    ];
+
+        [SpotifyKey] = new SourceDefinition(Key: SpotifyKey,
+            Name: "Spotify",
+            Hosts: ["open.spotify.com"],
+            ExampleHosts: ["open.spotify.com"]),
+    };
+
+    private static readonly List<SourceDefinition> ActiveSources = [AllSources[YoutubeKey]];
+
+    public static void Register(string key)
+    {
+        if (!AllSources.TryGetValue(key, out var source))
+        {
+            throw new ArgumentException($"Unknown source key '{key}'.", nameof(key));
+        }
+
+        if (ActiveSources.Any(s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        ActiveSources.Add(source);
+    }
 
     public static bool IsSupported(string url)
     {
@@ -28,13 +51,9 @@ public static class SupportedSources
             return false;
         }
 
-        foreach (var source in Sources)
+        foreach (var source in ActiveSources.Where(source =>
+                     source.Hosts.Any(host => string.Equals(uri?.Host, host, StringComparison.OrdinalIgnoreCase))))
         {
-            if (!source.Hosts.Any(host => string.Equals(uri?.Host, host, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-
             key = source.Key;
             return true;
         }
@@ -44,7 +63,7 @@ public static class SupportedSources
 
     public static string GetSupportedSourcesMessage()
     {
-        var descriptions = Sources
+        var descriptions = ActiveSources
             .Select(source => $"{source.Name} ({string.Join(", ", source.ExampleHosts)})")
             .ToArray();
 

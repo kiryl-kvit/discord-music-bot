@@ -10,5 +10,7 @@ public static class EnvKeyMapping
             ["PUBLIC_KEY"] = "BotSettings:PublicKey",
             ["PLAYLIST_LIMIT"] = "MusicSources:PlaylistLimit",
             ["VOLUME"] = "MusicSources:Volume",
+            ["SPOTIFY_CLIENT_ID"] = "Spotify:ClientId",
+            ["SPOTIFY_CLIENT_SECRET"] = "Spotify:ClientSecret",
         };
 }
