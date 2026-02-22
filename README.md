@@ -4,8 +4,20 @@ A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/disc
 
 ## Features
 
-- Play music from YouTube and YouTube Music links (single tracks and playlists)
+- Play music from YouTube, YouTube Music, and Spotify links (tracks, playlists, and albums)
 - Queue management with slash commands
+
+## Supported Sources
+
+| Source        | Supported Links           | Required Config                              |
+|---------------|---------------------------|----------------------------------------------|
+| YouTube       | Single videos, playlists  | None (built-in)                              |
+| YouTube Music | Single videos, playlists  | None (built-in)                              |
+| Spotify       | Tracks, playlists, albums | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` |
+
+**YouTube** and **YouTube Music** are always available out of the box.
+
+**Spotify** support is optional. When configured, the bot fetches track metadata from the Spotify API and resolves each track to YouTube for audio playback. If Spotify credentials are not provided, Spotify links are treated as unsupported.
 
 ## Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
@@ -32,7 +44,28 @@ PUBLIC_KEY=your_public_key
 PLAYLIST_LIMIT=50
 ```
 
-### 3. Run locally
+### 3. Configure Spotify (optional)
+
+To enable Spotify support, add the following to your `.env` file:
+
+```env
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+```
+
+To obtain these credentials:
+
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Create a new application
+   - When prompted for a **Redirect URI**, enter `https://localhost` -- this is required by the form but is not used by the bot
+   - Select **Web API** when asked which API/SDKs you plan to use
+3. Copy the **Client ID** and **Client Secret** from the application settings
+
+No Spotify user login is required. The bot uses the [Client Credentials](https://developer.spotify.com/documentation/web-api/tutorials/client-credentials-flow) flow, which only requires app-level credentials.
+
+If these variables are not set, the bot starts normally with YouTube-only support.
+
+### 4. Run locally
 
 ```bash
 dotnet run --project DiscordMusicBot.App
@@ -114,6 +147,8 @@ APP_ID=your_application_id
 PUBLIC_KEY=your_public_key
 PLAYLIST_LIMIT=50
 VOLUME=1.0
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 ```
 
 Then run:
@@ -138,6 +173,7 @@ This project uses the following open-source libraries, all licensed under MIT:
 - [YoutubeExplode](https://github.com/Tyrrrz/YoutubeExplode) - YouTube data extraction
 - [FFMpegCore](https://github.com/rosenbjerg/FFMpegCore) - FFmpeg .NET wrapper
 - [DotNetEnv](https://github.com/tonerdo/dotnet-env) - .env file loader
+- [SpotifyAPI-NET](https://github.com/JohnnyCrazy/SpotifyAPI-NET) - Spotify Web API client
 
 Pre-built Docker images include FFmpeg, which is licensed under GPL v2+. The FFmpeg source code is available from the Debian package repository (https://packages.debian.org/source/ffmpeg). Your use of the Docker image is subject to FFmpeg's license terms. This project's own source code remains under the MIT License.
 
