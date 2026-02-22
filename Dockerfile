@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
 COPY DiscordMusicBot.slnx .
@@ -12,18 +12,19 @@ RUN dotnet restore DiscordMusicBot.slnx
 COPY . .
 RUN dotnet publish DiscordMusicBot.App/DiscordMusicBot.App.csproj \
     -c Release \
+    -r linux-musl-x64 \
     -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine AS runtime
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg libopus0 libsodium23 && \
-    rm -rf /var/lib/apt/lists/* && \
-    mkdir -p /app/runtimes/linux-x64/native && \
-    ln -s /usr/lib/x86_64-linux-gnu/libopus.so.0 /app/runtimes/linux-x64/native/libopus.so && \
-    ln -s /usr/lib/x86_64-linux-gnu/libsodium.so.23 /app/runtimes/linux-x64/native/libsodium.so
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+RUN apk add --no-cache icu-libs ffmpeg opus libsodium
 
 COPY --from=build /app/publish .
+
+RUN ln -s /usr/lib/libopus.so.0 libopus.so && \
+    ln -s /usr/lib/libsodium.so.26 libsodium.so
 
 ENTRYPOINT ["dotnet", "DiscordMusicBot.App.dll"]
