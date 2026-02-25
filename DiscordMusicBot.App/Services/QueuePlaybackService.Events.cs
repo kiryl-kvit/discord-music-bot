@@ -10,6 +10,7 @@ public sealed partial class QueuePlaybackService
 
         var state = GetState(guildId);
         state.IsConnected = true;
+        state.VoiceChannelId = voiceConnectionService.GetVoiceChannelId(guildId);
 
         await StartAsync(guildId);
     }
@@ -22,5 +23,7 @@ public sealed partial class QueuePlaybackService
         state.IsConnected = false;
 
         await PauseAsync(guildId);
+
+        state.VoiceChannelId = null;
     }
 }

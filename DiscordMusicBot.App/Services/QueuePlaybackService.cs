@@ -2,11 +2,11 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
-using DiscordMusicBot.App.Extensions;
 using DiscordMusicBot.App.Services.Models;
 using DiscordMusicBot.Core;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
+using DiscordMusicBot.Domain.Playback;
 using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +15,8 @@ namespace DiscordMusicBot.App.Services;
 public sealed partial class QueuePlaybackService(
     IAudioStreamProviderFactory audioStreamProviderFactory,
     VoiceConnectionService voiceConnectionService,
+    IPlayQueueRepository queueRepository,
+    IGuildPlaybackStateRepository stateRepository,
     DiscordSocketClient discordClient,
     ILogger<QueuePlaybackService> logger)
 {
@@ -33,13 +35,10 @@ public sealed partial class QueuePlaybackService(
         return GetState(guildId).CurrentItem;
     }
 
-    public IReadOnlyCollection<PlayQueueItem> GetQueueItems(ulong guildId, int skip = 0, int take = 10)
+    public async Task<IReadOnlyCollection<PlayQueueItem>> GetQueueItemsAsync(ulong guildId, int skip = 0,
+        int take = 10)
     {
-        var state = GetState(guildId);
-        return state.WithItems(items => items
-            .Skip(skip)
-            .Take(take)
-            .ToArray());
+        return await queueRepository.GetPageAsync(guildId, skip, take);
     }
 
     public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items,
@@ -52,7 +51,8 @@ public sealed partial class QueuePlaybackService(
             state.FeedbackChannel = feedbackChannel;
         }
 
-        state.WithItems(list => list.AddRange(items));
+        var itemsList = items as IReadOnlyList<PlayQueueItem> ?? items.ToArray();
+        await queueRepository.AddItemsAsync(guildId, itemsList);
 
         if (state is { IsPlaying: false, IsConnected: true })
         {
@@ -64,47 +64,21 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    public Task<Result> ShuffleQueueAsync(ulong guildId)
+    public async Task<Result> ShuffleQueueAsync(ulong guildId)
     {
+        var count = await queueRepository.GetCountAsync(guildId);
+        if (count <= 1)
+        {
+            return Result.Failure("Not enough items in the queue to shuffle.");
+        }
+
+        await queueRepository.ShuffleAsync(guildId);
+
         var state = GetState(guildId);
-        var shouldPrefetch = false;
+        state.ClearPrefetchedTrack();
+        _ = PrefetchTrackAsync(guildId, CancellationToken.None);
 
-        var shuffleResult = state.WithItems(items =>
-        {
-            if (items.Count <= 1)
-            {
-                return Result.Failure("Not enough items in the queue to shuffle.");
-            }
-
-            var startIndex = items.Count > 0 && ReferenceEquals(items[0], state.CurrentItem) ? 1 : 0;
-            if (items.Count - startIndex <= 1)
-            {
-                return Result.Failure("Not enough items in the queue to shuffle.");
-            }
-
-            for (var i = items.Count - 1; i > startIndex; i--)
-            {
-                var j = Random.Shared.Next(startIndex, i + 1);
-                (items[i], items[j]) = (items[j], items[i]);
-            }
-
-            shouldPrefetch = true;
-            return Result.Success();
-        });
-
-        if (!shuffleResult.IsSuccess)
-        {
-            return Task.FromResult(shuffleResult);
-        }
-
-        if (shouldPrefetch)
-        {
-            ClearPrefetchedTrack(state);
-
-            _ = PrefetchTrackAsync(guildId, CancellationToken.None);
-        }
-
-        return Task.FromResult(Result.Success());
+        return Result.Success();
     }
 
     public async Task ClearQueueAsync(ulong guildId)
@@ -116,13 +90,13 @@ public sealed partial class QueuePlaybackService(
             await FullStopAsync(guildId);
         }
 
-        state.ResumePosition = TimeSpan.Zero;
-        state.ResumeItemId = null;
-        state.WithItems(items => items.Clear());
-        ClearPrefetchedTrack(state);
+        state.ResetResumeState();
+        state.ClearPrefetchedTrack();
+        await queueRepository.ClearAsync(guildId);
+        await ClearPersistedStateAsync(guildId);
     }
 
-    public Task StartAsync(ulong guildId, IMessageChannel? feedbackChannel = null)
+    public async Task StartAsync(ulong guildId, IMessageChannel? feedbackChannel = null)
     {
         var state = GetState(guildId);
 
@@ -134,14 +108,14 @@ public sealed partial class QueuePlaybackService(
         if (state.IsPlaying)
         {
             logger.LogInformation("Queue is already playing in guild {GuildId}", guildId);
-            return Task.CompletedTask;
+            return;
         }
 
-        var hasItems = state.WithItems(items => items.Count > 0);
-        if (!hasItems)
+        var count = await queueRepository.GetCountAsync(guildId);
+        if (count == 0)
         {
             logger.LogInformation("Queue is empty in guild {GuildId}, nothing to start", guildId);
-            return Task.CompletedTask;
+            return;
         }
 
         state.PauseCts = new CancellationTokenSource();
@@ -150,7 +124,6 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Starting queue playback in guild {GuildId}", guildId);
 
         _ = RunAdvancementLoopAsync(guildId);
-        return Task.CompletedTask;
     }
 
     public async Task PauseAsync(ulong guildId)
@@ -164,14 +137,16 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Pausing queue playback in guild {GuildId}", guildId);
 
         var currentItem = state.CurrentItem;
-        CancelPlayback(state);
+        state.CancelPlayback();
 
         if (currentItem is not null)
         {
-            state.WithItems(items => items.Insert(0, currentItem));
+            await queueRepository.InsertAtFrontAsync(guildId, currentItem);
         }
 
-        ClearPrefetchedTrack(state);
+        await PersistStateAsync(guildId, state);
+
+        state.ClearPrefetchedTrack();
         await ClearActivityAsync();
     }
 
@@ -186,10 +161,8 @@ public sealed partial class QueuePlaybackService(
 
         logger.LogInformation("Resetting queue playback in guild {GuildId}", guildId);
 
-        state.ResumePosition = TimeSpan.Zero;
-        state.ResumeItemId = null;
-        CancelPlayback(state);
-        ClearPrefetchedTrack(state);
+        state.FullReset();
+        await ClearPersistedStateAsync(guildId);
         await ClearActivityAsync();
     }
 
@@ -205,19 +178,96 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Skipping current track in guild {GuildId}", guildId);
 
         var currentItem = state.CurrentItem;
-        var nextItem = state.WithItems(items => items.FirstOrDefault());
-        state.ResumePosition = TimeSpan.Zero;
-        state.ResumeItemId = null;
-        try
-        {
-            state.SkipCts?.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // Already disposed.
-        }
+        var nextItem = state.PrefetchedTrack is not null
+            ? queueRepository.PeekNextAsync(guildId).GetAwaiter().GetResult()
+            : null;
+        state.ResetResumeState();
+        state.TriggerSkip();
 
         return Task.FromResult(new ValueTuple<PlayQueueItem?, PlayQueueItem?>(currentItem, nextItem));
+    }
+
+    public async Task RestoreAsync()
+    {
+        IReadOnlyList<PersistedGuildState> persisted;
+
+        try
+        {
+            persisted = await stateRepository.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to load persisted guild playback states");
+            return;
+        }
+
+        if (persisted.Count == 0)
+        {
+            logger.LogInformation("No persisted guild playback states to restore");
+            return;
+        }
+
+        logger.LogInformation("Restoring playback state for {Count} guild(s)", persisted.Count);
+
+        foreach (var saved in persisted)
+        {
+            await RestoreGuildAsync(saved);
+        }
+    }
+
+    private async Task RestoreGuildAsync(PersistedGuildState saved)
+    {
+        var guildId = saved.GuildId;
+
+        try
+        {
+            var guild = discordClient.GetGuild(guildId);
+            if (guild is null)
+            {
+                logger.LogWarning("Guild {GuildId} not found during restore; clearing persisted state", guildId);
+                await ClearPersistedStateAsync(guildId);
+                return;
+            }
+
+            var voiceChannel = guild.GetVoiceChannel(saved.VoiceChannelId);
+            if (voiceChannel is null)
+            {
+                logger.LogWarning(
+                    "Voice channel {ChannelId} not found in guild {GuildId} during restore; clearing persisted state",
+                    saved.VoiceChannelId, guildId);
+                await ClearPersistedStateAsync(guildId);
+                return;
+            }
+
+            var queueCount = await queueRepository.GetCountAsync(guildId);
+            if (queueCount == 0)
+            {
+                logger.LogInformation("Queue is empty for guild {GuildId} during restore; clearing persisted state",
+                    guildId);
+                await ClearPersistedStateAsync(guildId);
+                return;
+            }
+
+            var state = GetState(guildId);
+            state.ResumePosition = saved.ResumePosition;
+            state.ResumeItemId = saved.ResumeItemId;
+
+            if (saved.FeedbackChannelId is { } feedbackId)
+            {
+                state.FeedbackChannel = guild.GetTextChannel(feedbackId);
+            }
+
+            logger.LogInformation(
+                "Restoring guild {GuildId}: joining voice channel {ChannelId}, resume position {ResumePosition}",
+                guildId, saved.VoiceChannelId, saved.ResumePosition);
+
+            await voiceConnectionService.JoinAsync(voiceChannel);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to restore playback state for guild {GuildId}", guildId);
+            await ClearPersistedStateAsync(guildId);
+        }
     }
 
     private GuildPlaybackState GetState(ulong guildId)
@@ -234,19 +284,13 @@ public sealed partial class QueuePlaybackService(
         {
             while (state.IsPlaying && !pauseToken.IsCancellationRequested)
             {
-                state.CurrentItem = state.WithItems(items => items.Pop());
+                state.CurrentItem = await queueRepository.PopNextAsync(guildId);
                 var item = state.CurrentItem;
 
                 if (item is null)
                 {
                     logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
-
-                    state.ResumePosition = TimeSpan.Zero;
-                    state.ResumeItemId = null;
-                    CancelPlayback(state);
-                    ClearPrefetchedTrack(state);
-                    await ClearActivityAsync();
-
+                    await FullStopAsync(guildId);
                     break;
                 }
 
@@ -303,11 +347,8 @@ public sealed partial class QueuePlaybackService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected error in queue advancement loop for guild {GuildId}", guildId);
-            state.ResumePosition = TimeSpan.Zero;
-            state.ResumeItemId = null;
-            CancelPlayback(state);
-            state.CurrentItem = null;
-            ClearPrefetchedTrack(state);
+            state.FullReset();
+            await ClearPersistedStateAsync(guildId);
             await ClearActivityAsync();
             await SendFeedbackAsync(guildId,
                 "Playback stopped unexpectedly",
@@ -330,119 +371,96 @@ public sealed partial class QueuePlaybackService(
         }
 
         var startFrom = state.ResumeItemId == item.Id ? state.ResumePosition : TimeSpan.Zero;
-        state.ResumePosition = TimeSpan.Zero;
-        state.ResumeItemId = null;
+        state.ResetResumeState();
 
         using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(pauseToken, skipToken);
 
-        PcmAudioStream pcmAudioStream;
-
-        if (state.PrefetchedTrack is { } prefetched && prefetched.ItemId == item.Id && startFrom == TimeSpan.Zero)
+        var streamResult = await AcquireOrUsePrefetchedStreamAsync(state, item, startFrom, streamCts.Token);
+        if (!streamResult.IsSuccess)
         {
-            var resolved = prefetched.ResolvedStream;
-            state.PrefetchedTrack = null;
-
-            logger.LogInformation("Launching FFmpeg for prefetched '{Title}' in guild {GuildId}",
-                item.Title, guildId);
-
-            var launchResult = await LaunchAudioStreamAsync(item, resolved, TimeSpan.Zero, streamCts.Token);
-            if (!launchResult.IsSuccess)
-            {
-                await SendFeedbackAsync(guildId,
-                    $"Failed to play '{item.Title}'",
-                    $"{launchResult.ErrorMessage}. Skipping to next track.");
-                return;
-            }
-
-            pcmAudioStream = launchResult.Value!;
-        }
-        else
-        {
-            ClearPrefetchedTrack(state);
-
-            var streamResult = await AcquireAudioStreamAsync(item, startFrom, streamCts.Token);
-            if (!streamResult.IsSuccess)
-            {
-                await SendFeedbackAsync(guildId,
-                    $"Failed to play '{item.Title}'",
-                    $"{streamResult.ErrorMessage}. Skipping to next track.");
-                return;
-            }
-
-            pcmAudioStream = streamResult.Value!;
+            await SendFeedbackAsync(guildId,
+                $"Failed to play '{item.Title}'",
+                $"{streamResult.ErrorMessage}. Skipping to next track.");
+            return;
         }
 
-        await using (pcmAudioStream)
+        await using var pcmAudioStream = streamResult.Value!;
+
+        logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId} (from {StartFrom})",
+            item.Title, guildId, startFrom);
+
+        _ = PrefetchTrackAsync(guildId, pauseToken);
+
+        var discordStream = state.DiscordPcmStream;
+        if (discordStream is null || state.DiscordPcmStreamOwner != audioClient)
         {
-            logger.LogInformation("Streaming audio for '{Title}' in guild {GuildId} (from {StartFrom})",
-                item.Title, guildId, startFrom);
-
-            _ = PrefetchTrackAsync(guildId, pauseToken);
-
-            var discordStream = state.DiscordPcmStream;
-            if (discordStream is null || state.DiscordPcmStreamOwner != audioClient)
+            if (discordStream is not null)
             {
-                if (discordStream is not null)
-                {
-                    await discordStream.FlushAsync(CancellationToken.None);
-                    await discordStream.DisposeAsync();
-                }
-
-                discordStream = audioClient.CreatePCMStream(AudioApplication.Music);
-                state.DiscordPcmStream = discordStream;
-                state.DiscordPcmStreamOwner = audioClient;
+                await discordStream.FlushAsync(CancellationToken.None);
+                await discordStream.DisposeAsync();
             }
+
+            discordStream = audioClient.CreatePCMStream(AudioApplication.Music);
+            state.DiscordPcmStream = discordStream;
+            state.DiscordPcmStreamOwner = audioClient;
+        }
+
+        try
+        {
+            var buffer = new byte[PcmBufferSize];
+            long bytesWritten = 0;
 
             try
             {
-                var buffer = new byte[PcmBufferSize];
-                long bytesWritten = 0;
-
-                try
+                int bytesRead;
+                while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, skipToken)) > 0)
                 {
-                    int bytesRead;
-                    while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, skipToken)) > 0)
-                    {
-                        await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), skipToken);
-                        bytesWritten += bytesRead;
-                    }
-                }
-                finally
-                {
-                    if (pauseToken.IsCancellationRequested)
-                    {
-                        state.ResumePosition =
-                            startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
-                        state.ResumeItemId = item.Id;
-                    }
+                    await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), skipToken);
+                    bytesWritten += bytesRead;
                 }
             }
-            catch (OperationCanceledException)
+            finally
             {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Error streaming audio for '{Title}' in guild {GuildId}. " +
-                                      "Resetting Discord PCM stream.", item.Title, guildId);
-
-                state.DiscordPcmStream = null;
-                state.DiscordPcmStreamOwner = null;
-
-                try
+                if (pauseToken.IsCancellationRequested)
                 {
-                    await discordStream.DisposeAsync();
+                    state.ResumePosition =
+                        startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
+                    state.ResumeItemId = item.Id;
+                    await PersistStateAsync(guildId, state);
                 }
-                catch
-                {
-                    //
-                }
-
-                throw;
             }
-
-            logger.LogInformation("Finished streaming '{Title}' in guild {GuildId}", item.Title, guildId);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error streaming audio for '{Title}' in guild {GuildId}. " +
+                                  "Resetting Discord PCM stream.", item.Title, guildId);
+            state.ResetDiscordStream(discordStream);
+            throw;
+        }
+
+        logger.LogInformation("Finished streaming '{Title}' in guild {GuildId}", item.Title, guildId);
+    }
+
+    private async Task<Result<PcmAudioStream>> AcquireOrUsePrefetchedStreamAsync(
+        GuildPlaybackState state, PlayQueueItem item, TimeSpan startFrom, CancellationToken cancellationToken)
+    {
+        if (state.PrefetchedTrack is { } prefetched && prefetched.ItemId == item.Id && startFrom == TimeSpan.Zero)
+        {
+            var resolved = prefetched.ResolvedStream;
+            state.ClearPrefetchedTrack();
+
+            logger.LogInformation("Launching FFmpeg for prefetched '{Title}' in guild {GuildId}",
+                item.Title, item.GuildId);
+
+            return await LaunchAudioStreamAsync(item, resolved, TimeSpan.Zero, cancellationToken);
+        }
+
+        state.ClearPrefetchedTrack();
+        return await AcquireAudioStreamAsync(item, startFrom, cancellationToken);
     }
 
     private async Task<Result<PcmAudioStream>> AcquireAudioStreamAsync(
@@ -496,7 +514,7 @@ public sealed partial class QueuePlaybackService(
     {
         var state = GetState(guildId);
 
-        var nextItem = state.WithItems(items => items.FirstOrDefault());
+        var nextItem = await queueRepository.PeekNextAsync(guildId);
         if (nextItem is null)
         {
             return;
@@ -507,7 +525,7 @@ public sealed partial class QueuePlaybackService(
             return;
         }
 
-        ClearPrefetchedTrack(state);
+        state.ClearPrefetchedTrack();
 
         try
         {
@@ -538,55 +556,40 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private static void ClearPrefetchedTrack(GuildPlaybackState state)
+    private async Task PersistStateAsync(ulong guildId, GuildPlaybackState state)
     {
-        state.PrefetchedTrack = null;
-    }
-
-    private static void CancelPlayback(GuildPlaybackState state)
-    {
-        state.IsPlaying = false;
-
-        if (state.DiscordPcmStream is not null)
-        {
-            var discordPcmStream = state.DiscordPcmStream;
-            state.DiscordPcmStream = null;
-            state.DiscordPcmStreamOwner = null;
-            _ = DisposeDiscordPcmStreamAsync(discordPcmStream);
-        }
-
-        SafeCancelAndDispose(ref state.PauseCts);
-        SafeCancelAndDispose(ref state.SkipCts);
-    }
-
-    private static void SafeCancelAndDispose(ref CancellationTokenSource? cts)
-    {
-        var snapshot = Interlocked.Exchange(ref cts, null);
-        if (snapshot is null)
+        var voiceChannelId = voiceConnectionService.GetVoiceChannelId(guildId) ?? state.VoiceChannelId;
+        if (voiceChannelId is null)
         {
             return;
         }
 
+        var feedbackChannelId = state.FeedbackChannel is IEntity<ulong> entity ? entity.Id : (ulong?)null;
+
         try
         {
-            snapshot.Cancel();
-            snapshot.Dispose();
+            await stateRepository.SaveAsync(new PersistedGuildState(
+                guildId,
+                voiceChannelId.Value,
+                feedbackChannelId,
+                state.ResumePosition,
+                state.ResumeItemId));
         }
-        catch (ObjectDisposedException)
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to persist playback state for guild {GuildId}", guildId);
         }
     }
 
-    private static async Task DisposeDiscordPcmStreamAsync(AudioOutStream stream)
+    private async Task ClearPersistedStateAsync(ulong guildId)
     {
         try
         {
-            await stream.FlushAsync(CancellationToken.None);
-            await stream.DisposeAsync();
+            await stateRepository.DeleteAsync(guildId);
         }
-        catch
+        catch (Exception ex)
         {
-            //
+            logger.LogWarning(ex, "Failed to clear persisted playback state for guild {GuildId}", guildId);
         }
     }
 

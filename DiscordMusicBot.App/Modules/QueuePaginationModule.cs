@@ -15,7 +15,7 @@ public class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : 
         var pageIndex = page - 1;
         var skip = pageIndex * pageSize;
 
-        var items = queuePlaybackService.GetQueueItems(guildId, skip, take: pageSize);
+        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
 
         var embed = QueueEmbedBuilder.BuildQueueEmbed(items, currentItem, page, pageSize);

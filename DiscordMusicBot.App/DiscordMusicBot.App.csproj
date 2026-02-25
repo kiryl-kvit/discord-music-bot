@@ -10,12 +10,7 @@
     <ItemGroup>
         <PackageReference Include="Discord.Net" Version="3.19.0-beta.1"/>
         <PackageReference Include="DotNetEnv" Version="3.1.1"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.3">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
+
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3"/>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3"/>
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.3"/>
@@ -29,6 +24,7 @@
     <ItemGroup>
         <ProjectReference Include="..\DiscordMusicBot.Domain\DiscordMusicBot.Domain.csproj"/>
         <ProjectReference Include="..\DiscordMusicBot.Core\DiscordMusicBot.Core.csproj"/>
+        <ProjectReference Include="..\DiscordMusicBot.Infrastructure\DiscordMusicBot.Infrastructure.csproj"/>
     </ItemGroup>
 
 </Project>

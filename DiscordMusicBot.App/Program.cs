@@ -8,6 +8,7 @@ using DiscordMusicBot.App;
 using DiscordMusicBot.App.Configuration;
 using DiscordMusicBot.App.Options;
 using DiscordMusicBot.App.Services;
+using DiscordMusicBot.Infrastructure.Database;
 using Microsoft.Extensions.Options;
 
 var host = Host.CreateDefaultBuilder(args)
@@ -26,6 +27,9 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
+var migrator = host.Services.GetRequiredService<DatabaseMigrator>();
+migrator.Migrate();
+
 var voiceConnectionService = host.Services.GetRequiredService<VoiceConnectionService>();
 var queuePlaybackService = host.Services.GetRequiredService<QueuePlaybackService>();
 
@@ -35,6 +39,18 @@ discordClient.UserVoiceStateUpdated += voiceConnectionService.HandleVoiceStateUp
 voiceConnectionService.Connected += queuePlaybackService.OnVoiceConnected;
 voiceConnectionService.Disconnected += queuePlaybackService.OnVoiceDisconnected;
 
+var restoreComplete = false;
+discordClient.Ready += async () =>
+{
+    if (restoreComplete)
+    {
+        return;
+    }
+
+    restoreComplete = true;
+    await queuePlaybackService.RestoreAsync();
+};
+
 var interactionHandler = host.Services.GetRequiredService<InteractionHandler>();
 await interactionHandler.InitializeAsync();
 
@@ -43,3 +59,6 @@ await discordClient.LoginAsync(TokenType.Bot, botSettings.BotToken);
 await discordClient.StartAsync();
 
 await host.RunAsync();
+
+await voiceConnectionService.DisconnectAllAsync();
+await discordClient.StopAsync();

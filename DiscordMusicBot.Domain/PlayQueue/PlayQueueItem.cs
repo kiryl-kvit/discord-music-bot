@@ -29,4 +29,24 @@ public sealed class PlayQueueItem
             Duration = duration
         };
     }
+
+    public static PlayQueueItem Restore(long id, ulong guildId, ulong userId, string url, string title,
+        string? author, TimeSpan? duration)
+    {
+        return new PlayQueueItem
+        {
+            Id = id,
+            GuildId = guildId,
+            UserId = userId,
+            Url = url,
+            Title = title,
+            Author = author,
+            Duration = duration
+        };
+    }
+
+    public void SetId(long id)
+    {
+        Id = id;
+    }
 }
