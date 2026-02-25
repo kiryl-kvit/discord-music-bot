@@ -255,13 +255,13 @@ public sealed partial class QueuePlaybackService(
 
                 await SetActivityAsync(item.Title);
 
-                if (item.Duration is null || item.Duration.Value <= TimeSpan.Zero)
+                if (item.Duration is { } d && d <= TimeSpan.Zero)
                 {
-                    logger.LogInformation("Track '{Title}' has no duration, skipping to next in guild {GuildId}",
+                    logger.LogInformation("Track '{Title}' has zero/negative duration, skipping in guild {GuildId}",
                         item.Title, guildId);
                     await SendFeedbackAsync(guildId,
                         $"Skipping '{item.Title}'",
-                        "No duration available for this track.");
+                        "Track has an invalid duration.");
                     continue;
                 }
 
