@@ -19,8 +19,8 @@ A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/disc
 
 ## Documentation
 
-- **[Development Guide](docs/DEVELOPMENT.md)** -- prerequisites, local setup, environment configuration, running locally, Docker builds, and project structure
-- **[Deployment Guide](docs/DEPLOYMENT.md)** -- creating a Discord application, bot permissions, inviting the bot to your server, and Docker Compose production setup
+- **[Development Guide](docs/DEVELOPMENT.md)**
+- **[Deployment Guide](docs/DEPLOYMENT.md)**
 
 ## Third-Party Licenses
 
