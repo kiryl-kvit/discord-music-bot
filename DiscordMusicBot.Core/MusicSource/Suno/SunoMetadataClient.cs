@@ -80,14 +80,14 @@ public sealed partial class SunoMetadataClient(
 
     private static List<SunoTrack> ParsePlaylistPage(string html, int limit)
     {
-        var songsByTitle = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var titlesBySongId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Match match in PlaylistSongPattern().Matches(html))
         {
             var title = match.Groups[1].Value.Trim();
             var songId = match.Groups[2].Value;
 
-            songsByTitle.TryAdd(songId, title);
+            titlesBySongId.TryAdd(songId, title);
         }
 
         var audioSongIds = new List<string>();
@@ -111,7 +111,7 @@ public sealed partial class SunoMetadataClient(
                 break;
             }
 
-            var title = songsByTitle.GetValueOrDefault(songId) ?? songId;
+            var title = titlesBySongId.GetValueOrDefault(songId) ?? songId;
             tracks.Add(new SunoTrack(title, Artist: null, songId));
         }
 
@@ -121,7 +121,7 @@ public sealed partial class SunoMetadataClient(
         }
 
         // If og:audio tags were missing, fall back to song links from the HTML body.
-        foreach (var (songId, title) in songsByTitle)
+        foreach (var (songId, title) in titlesBySongId)
         {
             if (tracks.Count >= limit)
             {
