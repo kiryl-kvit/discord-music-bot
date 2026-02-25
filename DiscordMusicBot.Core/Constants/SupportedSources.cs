@@ -4,6 +4,7 @@ public static class SupportedSources
 {
     public const string YoutubeKey = "youtube";
     public const string SpotifyKey = "spotify";
+    public const string SunoKey = "suno";
 
     private sealed record SourceDefinition(string Key, string Name, string[] Hosts, string[] ExampleHosts);
 
@@ -18,6 +19,11 @@ public static class SupportedSources
             Name: "Spotify",
             Hosts: ["open.spotify.com"],
             ExampleHosts: ["open.spotify.com"]),
+
+        [SunoKey] = new SourceDefinition(Key: SunoKey,
+            Name: "Suno",
+            Hosts: ["suno.com", "www.suno.com"],
+            ExampleHosts: ["suno.com"]),
     };
 
     private static readonly List<SourceDefinition> ActiveSources = [AllSources[YoutubeKey]];

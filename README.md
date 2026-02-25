@@ -2,11 +2,6 @@
 
 A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/discord-net/Discord.Net)
 
-## Features
-
-- Play music from YouTube, YouTube Music, and Spotify links (tracks, playlists, and albums)
-- Queue management with slash commands
-
 ## Supported Sources
 
 | Source        | Supported Links           | Required Config                              |
@@ -14,10 +9,13 @@ A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/disc
 | YouTube       | Single videos, playlists  | None (built-in)                              |
 | YouTube Music | Single videos, playlists  | None (built-in)                              |
 | Spotify       | Tracks, playlists, albums | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` |
+| Suno          | Songs, playlists          | `SUNO_ENABLED=true`                          |
 
 **YouTube** and **YouTube Music** are always available out of the box.
 
 **Spotify** support is optional. When configured, the bot fetches track metadata from the Spotify API and resolves each track to YouTube for audio playback. If Spotify credentials are not provided, Spotify links are treated as unsupported.
+
+**Suno** support is optional. When enabled, the bot scrapes song metadata from suno.com pages and streams audio directly from Suno's CDN. No API credentials are required -- just set `SUNO_ENABLED=true` to activate it.
 
 ## Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
@@ -65,7 +63,19 @@ No Spotify user login is required. The bot uses the [Client Credentials](https:/
 
 If these variables are not set, the bot starts normally with YouTube-only support.
 
-### 4. Run locally
+### 4. Configure Suno (optional)
+
+To enable Suno support, add the following to your `.env` file:
+
+```env
+SUNO_ENABLED=true
+```
+
+No API credentials are required. The bot fetches song metadata directly from suno.com pages and streams audio from Suno's public CDN.
+
+If this variable is not set or set to `false`, Suno links are treated as unsupported.
+
+### 5. Run locally
 
 ```bash
 dotnet run --project DiscordMusicBot.App
@@ -149,6 +159,7 @@ PLAYLIST_LIMIT=50
 VOLUME=1.0
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+SUNO_ENABLED=true
 ```
 
 Then run:
