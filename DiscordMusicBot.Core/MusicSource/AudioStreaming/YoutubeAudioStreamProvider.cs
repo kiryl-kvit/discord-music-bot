@@ -7,6 +7,7 @@ using FFMpegCore.Pipes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YoutubeExplode;
+using YoutubeExplode.Exceptions;
 using YoutubeExplode.Videos;
 
 namespace DiscordMusicBot.Core.MusicSource.AudioStreaming;
@@ -47,10 +48,39 @@ public sealed class YoutubeAudioStreamProvider(
 
             return Result<ResolvedStream>.Success(new ResolvedStream(streamInfo.Url, url));
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (VideoRequiresPurchaseException ex)
+        {
+            logger.LogWarning(ex, "YouTube video {VideoId} requires purchase.", videoId);
+            return Result<ResolvedStream>.Failure("This video requires purchase and cannot be played.");
+        }
+        catch (VideoUnavailableException ex)
+        {
+            logger.LogWarning(ex, "YouTube video {VideoId} is unavailable.", videoId);
+            return Result<ResolvedStream>.Failure(
+                "This video is unavailable. It may have been removed or set to private.");
+        }
+        catch (VideoUnplayableException ex)
+        {
+            logger.LogWarning(ex, "YouTube video {VideoId} is unplayable.", videoId);
+            return Result<ResolvedStream>.Failure(
+                "This video is not available for playback. It may be region-restricted or require authentication.");
+        }
+        catch (RequestLimitExceededException ex)
+        {
+            logger.LogWarning(ex, "YouTube rate limit hit while resolving video {VideoId}.", videoId);
+            return Result<ResolvedStream>.Failure(
+                "YouTube is rate-limiting requests. Please try again later.");
+        }
+        catch (YoutubeExplodeException ex)
         {
             logger.LogWarning(ex, "Failed to resolve audio stream for YouTube video {VideoId}.", videoId);
-            return Result<ResolvedStream>.Failure("Unable to fetch audio stream for this video.");
+            return Result<ResolvedStream>.Failure(
+                "This video cannot be played. It may be region-restricted, require authentication, or be otherwise unavailable.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Unexpected error resolving audio stream for YouTube video {VideoId}.", videoId);
+            return Result<ResolvedStream>.Failure("An unexpected error occurred while fetching the audio stream.");
         }
     }
 
