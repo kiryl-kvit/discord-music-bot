@@ -10,6 +10,7 @@ using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Processors;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Spotify;
+using DiscordMusicBot.Core.MusicSource.Suno;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -30,9 +31,11 @@ public static class ServicesConfiguration
         services.AddSingleton<YoutubeClient>();
 
         services.AddKeyedSingleton<IAudioStreamProvider, YoutubeAudioStreamProvider>(SupportedSources.YoutubeKey);
+        services.AddSingleton<FfmpegAudioPipeline>();
         services.AddSingleton<IAudioStreamProviderFactory, AudioStreamProviderFactory>();
 
         services.ConfigureSpotify(configuration);
+        services.ConfigureSuno(configuration);
 
         return services;
     }
@@ -134,6 +137,32 @@ public static class ServicesConfiguration
 
             services.AddSingleton<SpotifyClientProvider>();
             services.AddKeyedScoped<IUrlProcessor, SpotifyUrlProcessor>(SupportedSources.SpotifyKey);
+
+            return services;
+        }
+
+        private IServiceCollection ConfigureSuno(IConfiguration configuration)
+        {
+            var section = configuration.GetSection(SunoOptions.SectionName);
+            var enabled = section[nameof(SunoOptions.Enabled)];
+
+            if (!string.Equals(enabled, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                return services;
+            }
+
+            SupportedSources.Register(SupportedSources.SunoKey);
+
+            services.BindOptions<SunoOptions>(configuration, SunoOptions.SectionName);
+
+            services.AddHttpClient<SunoMetadataClient>(client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                    "Mozilla/5.0 (compatible; DiscordMusicBot/1.0)");
+            });
+
+            services.AddKeyedScoped<IUrlProcessor, SunoUrlProcessor>(SupportedSources.SunoKey);
+            services.AddKeyedSingleton<IAudioStreamProvider, SunoAudioStreamProvider>(SupportedSources.SunoKey);
 
             return services;
         }
