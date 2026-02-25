@@ -99,6 +99,8 @@ public static class ServicesConfiguration
             services.AddSingleton<VoiceConnectionService>();
             services.AddSingleton<QueuePlaybackService>();
 
+            services.AddHostedService<BotHostedService>();
+
             return services;
         }
 

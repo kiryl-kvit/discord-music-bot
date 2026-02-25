@@ -187,6 +187,33 @@ public sealed partial class QueuePlaybackService(
         return Task.FromResult(new ValueTuple<PlayQueueItem?, PlayQueueItem?>(currentItem, nextItem));
     }
 
+    public async Task GracefulStopAsync()
+    {
+        var playingGuildIds = _states
+            .Where(kvp => kvp.Value.IsPlaying)
+            .Select(kvp => kvp.Key)
+            .ToArray();
+
+        if (playingGuildIds.Length == 0)
+        {
+            return;
+        }
+
+        logger.LogInformation("Gracefully stopping playback in {Count} guild(s)", playingGuildIds.Length);
+
+        foreach (var guildId in playingGuildIds)
+        {
+            try
+            {
+                await PauseAsync(guildId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to gracefully stop playback in guild {GuildId}", guildId);
+            }
+        }
+    }
+
     public async Task RestoreAsync()
     {
         IReadOnlyList<PersistedGuildState> persisted;
