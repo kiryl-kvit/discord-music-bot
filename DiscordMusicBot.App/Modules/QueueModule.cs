@@ -129,7 +129,7 @@ public sealed class QueueModule(
             }
 
             queueItems = musicItemsResult.Value!.Items
-                .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
+                .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl)).ToArray();
         }
         else
         {
