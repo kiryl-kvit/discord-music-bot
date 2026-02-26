@@ -111,12 +111,22 @@ public static class QueueEmbedBuilder
         return builder.Build();
     }
 
-    public static Embed BuildSkippedEmbed(PlayQueueItem? skippedItem, PlayQueueItem? nextItem)
+    public static Embed BuildSkippedEmbed(PlayQueueItem? skippedItem, int totalSkipped, PlayQueueItem? nextItem)
     {
         var builder = new EmbedBuilder()
             .WithColor(Color.Orange);
 
-        if (skippedItem is not null)
+        if (totalSkipped > 1)
+        {
+            builder.WithTitle($"Skipped {totalSkipped} tracks");
+
+            if (skippedItem is not null)
+            {
+                builder.WithDescription(
+                    $"Starting from: **{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor}");
+            }
+        }
+        else if (skippedItem is not null)
         {
             builder.WithTitle("Skipped")
                 .WithDescription($"**{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor}");

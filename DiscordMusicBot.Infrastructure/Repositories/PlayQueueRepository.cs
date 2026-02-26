@@ -100,6 +100,28 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 cancellationToken: cancellationToken));
     }
 
+    public async Task<int> DeleteTopNAsync(ulong guildId, int count, long? excludeItemId = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+
+        var deleted = await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                DELETE FROM play_queue_items
+                WHERE id IN (
+                    SELECT id FROM play_queue_items
+                    WHERE guild_id = @GuildId AND (@ExcludeId IS NULL OR id != @ExcludeId)
+                    ORDER BY position
+                    LIMIT @Count
+                )
+                """,
+                new { GuildId = guildId.ToString(), Count = count, ExcludeId = excludeItemId },
+                cancellationToken: cancellationToken));
+
+        return deleted;
+    }
+
     public async Task ShuffleAsync(ulong guildId, long? excludeItemId = null,
         CancellationToken cancellationToken = default)
     {

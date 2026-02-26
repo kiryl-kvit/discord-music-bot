@@ -126,8 +126,8 @@ public class QueueModule(
         await ModifyOriginalResponseAsync(props => props.Content = "Queue cleared.");
     }
 
-    [SlashCommand("skip", "Skip the current track")]
-    public async Task SkipAsync()
+    [SlashCommand("skip", "Skip one or more tracks")]
+    public async Task SkipAsync([MinValue(1)] int count = 1)
     {
         var guildId = Context.Guild.Id;
 
@@ -139,9 +139,9 @@ public class QueueModule(
 
         await DeferAsync();
 
-        var (skipped, next) = await queuePlaybackService.SkipAsync(guildId);
+        var result = await queuePlaybackService.SkipAsync(guildId, count);
 
-        var embed = QueueEmbedBuilder.BuildSkippedEmbed(skipped, next);
+        var embed = QueueEmbedBuilder.BuildSkippedEmbed(result.Skipped, result.TotalSkipped, result.Next);
         await ModifyOriginalResponseAsync(props => props.Embed = embed);
     }
 

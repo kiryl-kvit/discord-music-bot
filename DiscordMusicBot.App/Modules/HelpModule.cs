@@ -25,7 +25,7 @@ public class HelpModule : InteractionModuleBase
             .AddField("/queue resume", "Resume queue playback.", inline: false)
             .AddField("/queue pause", "Pause queue playback.", inline: false)
             .AddField("/queue shuffle", "Shuffle the current queue.", inline: false)
-            .AddField("/queue skip", "Skip the current track.", inline: false)
+            .AddField("/queue skip `[count]`", "Skip one or more tracks. Defaults to 1.", inline: false)
             .AddField("/queue list `[page]`", "Show the current queue with pagination.", inline: false)
             .AddField("/queue clear", "Clear all items from the queue.", inline: false)
             .Build();
