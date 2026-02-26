@@ -41,7 +41,7 @@ public sealed partial class SunoMetadataClient(
         }
     }
 
-    public async Task<IReadOnlyList<SunoTrack>> GetPlaylistTracksAsync(string playlistId,
+    public async Task<(string? PlaylistName, IReadOnlyList<SunoTrack> Tracks)> GetPlaylistAsync(string playlistId,
         CancellationToken cancellationToken)
     {
         try
@@ -49,12 +49,19 @@ public sealed partial class SunoMetadataClient(
             var url = SunoTrack.GetPlaylistPageUrl(playlistId);
             var html = await FetchHtmlAsync(url, cancellationToken);
 
-            return string.IsNullOrEmpty(html) ? [] : ParsePlaylistPage(html);
+            if (string.IsNullOrEmpty(html))
+            {
+                return (null, []);
+            }
+
+            var playlistName = ParseOgTitle(html);
+            var tracks = ParsePlaylistPage(html);
+            return (playlistName, tracks);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to fetch Suno playlist metadata for {PlaylistId}.", playlistId);
-            return [];
+            return (null, []);
         }
     }
 
@@ -135,6 +142,12 @@ public sealed partial class SunoMetadataClient(
         }
 
         return tracks;
+    }
+
+    private static string? ParseOgTitle(string html)
+    {
+        var match = OgTitlePattern().Match(html);
+        return match.Success ? match.Groups[1].Value.Trim() : null;
     }
 
     private async Task<string?> FetchHtmlAsync(string url, CancellationToken cancellationToken)

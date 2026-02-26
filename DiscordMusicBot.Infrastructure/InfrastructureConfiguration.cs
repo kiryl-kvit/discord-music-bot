@@ -1,3 +1,4 @@
+using DiscordMusicBot.Domain.Favorites;
 using DiscordMusicBot.Domain.Playback;
 using DiscordMusicBot.Domain.PlayQueue;
 using DiscordMusicBot.Infrastructure.Database;
@@ -21,6 +22,7 @@ public static class InfrastructureConfiguration
         services.AddSingleton<DatabaseMigrator>();
         services.AddSingleton<IPlayQueueRepository, PlayQueueRepository>();
         services.AddSingleton<IGuildPlaybackStateRepository, GuildPlaybackStateRepository>();
+        services.AddSingleton<IFavoriteRepository, FavoriteRepository>();
 
         return services;
     }

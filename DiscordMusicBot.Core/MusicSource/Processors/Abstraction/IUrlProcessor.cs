@@ -2,6 +2,6 @@ namespace DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 
 public interface IUrlProcessor
 {
-    Task<Result<IReadOnlyCollection<MusicSource>>> GetMusicItemsAsync(string url,
+    Task<Result<MusicSourceResult>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default);
 }

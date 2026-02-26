@@ -1,26 +1,35 @@
 using Discord.Interactions;
+using DiscordMusicBot.App.Modules.Autocomplete;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
+using DiscordMusicBot.Domain.Favorites;
 using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Modules;
 
 [Group("queue", "Queue commands")]
-public class QueueModule(
+public sealed class QueueModule(
     IUrlProcessorFactory urlProcessorFactory,
     QueuePlaybackService queuePlaybackService,
+    IFavoriteRepository favoriteRepository,
     ILogger<QueueModule> logger) : InteractionModuleBase
 {
-    [SlashCommand("add", "Enqueue an item")]
-    public async Task AddAsync(string url)
+    [SlashCommand("add", "Enqueue an item or a favorite")]
+    public async Task AddAsync([Autocomplete(typeof(QueueAddAutocompleteHandler))] string url)
     {
         var guildId = Context.Guild.Id;
         var userId = Context.User.Id;
 
         logger.LogInformation("User {UserId} is trying to enqueue {Url} in guild {GuildId}", userId, url, guildId);
         await DeferAsync(ephemeral: true);
+
+        if (url.StartsWith(FavoriteAutocompleteHelper.FavoritePrefix, StringComparison.Ordinal))
+        {
+            await EnqueueFromFavoriteAsync(guildId, userId, url[FavoriteAutocompleteHelper.FavoritePrefix.Length..]);
+            return;
+        }
 
         if (!SupportedSources.IsSupported(url))
         {
@@ -41,12 +50,76 @@ public class QueueModule(
             return;
         }
 
-        var queueItems = musicItemsResult.Value!
+        var queueItems = musicItemsResult.Value!.Items
             .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
 
         await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
 
         logger.LogInformation("User {UserId} enqueued {Url} in guild {GuildId}", userId, url, guildId);
+
+        var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(queueItems);
+        await ModifyOriginalResponseAsync(props =>
+        {
+            props.Content = null;
+            props.Embed = embed;
+        });
+    }
+
+    private async Task EnqueueFromFavoriteAsync(ulong guildId, ulong userId, string favoriteIdStr)
+    {
+        if (!long.TryParse(favoriteIdStr, out var favoriteId))
+        {
+            await ModifyOriginalResponseAsync(props => props.Content = "Invalid favorite selection.");
+            return;
+        }
+
+        var favorite = await favoriteRepository.GetByIdAsync(favoriteId);
+        if (favorite is null || favorite.UserId != userId)
+        {
+            await ModifyOriginalResponseAsync(props => props.Content = "Favorite not found.");
+            return;
+        }
+
+        logger.LogInformation("User {UserId} is enqueueing favorite {FavoriteId} ({Title}) in guild {GuildId}",
+            userId, favoriteId, favorite.DisplayName, guildId);
+
+        PlayQueueItem[] queueItems;
+
+        if (favorite.IsPlaylist)
+        {
+            if (!SupportedSources.IsSupported(favorite.Url))
+            {
+                await ModifyOriginalResponseAsync(props => props.Content =
+                    "The source for this favorite is no longer supported.");
+                return;
+            }
+
+            var urlProcessor = urlProcessorFactory.GetProcessor(favorite.Url);
+            var musicItemsResult = await urlProcessor.GetMusicItemsAsync(favorite.Url);
+
+            if (!musicItemsResult.IsSuccess)
+            {
+                await ModifyOriginalResponseAsync(props => props.Content =
+                    $"Failed to resolve playlist: {musicItemsResult.ErrorMessage}");
+                return;
+            }
+
+            queueItems = musicItemsResult.Value!.Items
+                .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
+        }
+        else
+        {
+            queueItems =
+            [
+                PlayQueueItem.Create(guildId, userId, favorite.Url, favorite.Title,
+                    favorite.Author, favorite.Duration)
+            ];
+        }
+
+        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
+
+        logger.LogInformation("User {UserId} enqueued favorite {FavoriteId} in guild {GuildId}",
+            userId, favoriteId, guildId);
 
         var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(queueItems);
         await ModifyOriginalResponseAsync(props =>
@@ -155,11 +228,13 @@ public class QueueModule(
         var pageIndex = page - 1;
         var skip = pageIndex * pageSize;
 
-        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize);
+        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize + 1);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var hasNextPage = items.Count > pageSize;
+        var pageItems = hasNextPage ? items.Take(pageSize).ToList() : items;
 
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(items, currentItem, page, pageSize);
-        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage: items.Count == pageSize);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize);
+        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage);
 
         await RespondAsync(embed: embed, components: components);
     }

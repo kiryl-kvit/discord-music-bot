@@ -3,8 +3,8 @@
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- [FFmpeg](https://ffmpeg.org/download.html) (must be available in `PATH`)
-- A Discord bot token ([Discord Developer Portal](https://discord.com/developers/applications))
+- [FFmpeg](https://ffmpeg.org/download.html) (must be in `PATH`)
+- A Discord bot token ([Developer Portal](https://discord.com/developers/applications))
 
 ## Setup
 
@@ -23,36 +23,27 @@ Create a `.env` file in `DiscordMusicBot.App/`:
 BOT_TOKEN=your_bot_token
 APP_ID=your_application_id
 PUBLIC_KEY=your_public_key
-PLAYLIST_LIMIT=50  # Set to 0 to disable the limit
 ```
 
-### 3. Run locally
+See the [environment variables reference](../README.md#environment-variables) for all available options.
+
+### 3. Run
 
 ```bash
 dotnet run --project DiscordMusicBot.App
 ```
 
-## Docker
-
-Build and run with Docker:
+Or use the convenience script:
 
 ```bash
-docker build -t discord-music-bot .
-docker run -d --env-file DiscordMusicBot.App/.env discord-music-bot
-```
-
-Or pull the pre-built image from GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/kiryl-kvit/discord-music-bot:latest
-docker run -d --env-file .env ghcr.io/kiryl-kvit/discord-music-bot:latest
+./start.sh
 ```
 
 ## Project Structure
 
 ```
-DiscordMusicBot.App/          # Startup, Discord interactions, slash commands
-DiscordMusicBot.Core/         # Business logic, audio streaming, URL processing
-DiscordMusicBot.Domain/       # Domain models
-DiscordMusicBot.Infrastructure/ # SQLite persistence, migrations, repositories
+DiscordMusicBot.App/            # Entry point, Discord interactions, slash commands, DI wiring
+DiscordMusicBot.Core/           # Business logic: URL processing, audio streaming, music sources
+DiscordMusicBot.Domain/         # Domain models and repository interfaces (no external dependencies)
+DiscordMusicBot.Infrastructure/ # SQLite persistence with Dapper, migrations, repository implementations
 ```

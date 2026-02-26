@@ -3,7 +3,7 @@ using DiscordMusicBot.App.Services;
 
 namespace DiscordMusicBot.App.Modules;
 
-public class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : InteractionModuleBase
+public sealed class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : InteractionModuleBase
 {
     [ComponentInteraction("queue:page:*")]
     public async Task HandlePageAsync(int page)
@@ -15,11 +15,13 @@ public class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : 
         var pageIndex = page - 1;
         var skip = pageIndex * pageSize;
 
-        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize);
+        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize + 1);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var hasNextPage = items.Count > pageSize;
+        var pageItems = hasNextPage ? items.Take(pageSize).ToList() : items;
 
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(items, currentItem, page, pageSize);
-        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage: items.Count == pageSize);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize);
+        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage);
 
         await ((Discord.IComponentInteraction)Context.Interaction).UpdateAsync(msg =>
         {

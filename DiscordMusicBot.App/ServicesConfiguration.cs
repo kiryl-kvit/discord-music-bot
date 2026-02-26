@@ -59,6 +59,10 @@ public static class ServicesConfiguration
                     "MusicSources:Volume must be between 0.0 and 2.0.")
                 .ValidateOnStart();
 
+            services.BindOptions<FavoritesOptions>(configuration, FavoritesOptions.SectionName)
+                .Validate(o => o.Limit >= 0, "Favorites:Limit must be 0 (unlimited) or a positive integer.")
+                .ValidateOnStart();
+
             return services;
         }
 

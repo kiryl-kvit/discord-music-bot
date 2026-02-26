@@ -14,5 +14,6 @@ public static class EnvKeyMapping
             ["SPOTIFY_CLIENT_SECRET"] = "Spotify:ClientSecret",
             ["SUNO_ENABLED"] = "Suno:Enabled",
             ["DATABASE_PATH"] = "Database:Path",
+            ["FAVORITES_LIMIT"] = "Favorites:Limit",
         };
 }

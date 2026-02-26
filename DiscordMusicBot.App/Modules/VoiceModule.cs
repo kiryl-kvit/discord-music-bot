@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Modules;
 
-public class VoiceModule(
+public sealed class VoiceModule(
     VoiceConnectionService voiceConnectionService,
     ILogger<VoiceModule> logger) : InteractionModuleBase
 {

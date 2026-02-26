@@ -1,39 +1,56 @@
 # Discord Music Bot
 
-A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/discord-net/Discord.Net)
+A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/discord-net/Discord.Net).
+
+## Features
+
+- **Favorites** -- save, list, rename, and remove favorite tracks per user
+- **State persistence** -- survives crashes and restarts by saving playback position, voice channel, and queue to a SQLite database, then auto-resuming where it left off
+- **Track prefetching** -- resolves the next track's audio stream while the current one is still playing for gapless transitions
+- **Hot-reload configuration** -- watches the `.env` file for changes and applies them without restarting the bot
 
 ## Supported Sources
 
-| Source        | Supported Links           | Required Config                              |
+| Source        | Supported Links           | Setup                                        |
 |---------------|---------------------------|----------------------------------------------|
-| YouTube       | Single videos, playlists  | None (built-in)                              |
-| YouTube Music | Single videos, playlists  | None (built-in)                              |
-| Spotify       | Tracks, playlists, albums | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` |
-| Suno          | Songs, playlists          | `SUNO_ENABLED=true`                          |
+| YouTube       | Single videos, playlists  | Built-in, no configuration needed            |
+| YouTube Music | Single videos, playlists  | Built-in, no configuration needed            |
+| Spotify       | Tracks, playlists, albums | Requires `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` ([details](docs/DEPLOYMENT.md#5-configure-spotify-optional)) |
+| Suno          | Songs, playlists          | Requires `SUNO_ENABLED=true` ([details](docs/DEPLOYMENT.md#6-configure-suno-optional)) |
 
-**YouTube** and **YouTube Music** are always available out of the box.
-
-**Spotify** support is optional. When configured, the bot fetches track metadata from the Spotify API and resolves each track to YouTube for audio playback. If Spotify credentials are not provided, Spotify links are treated as unsupported.
-
-**Suno** support is optional. When enabled, the bot scrapes song metadata from suno.com pages and streams audio directly from Suno's CDN. No API credentials are required -- just set `SUNO_ENABLED=true` to activate it.
+Spotify resolves tracks to YouTube for audio playback. Suno streams audio directly from its CDN.
 
 ## Documentation
 
-- **[Development Guide](docs/DEVELOPMENT.md)**
-- **[Deployment Guide](docs/DEPLOYMENT.md)**
+- **[Development Guide](docs/DEVELOPMENT.md)** -- local setup, project structure
+- **[Deployment Guide](docs/DEPLOYMENT.md)** -- Discord app setup, optional integrations, Docker
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BOT_TOKEN` | Yes | -- | Discord bot token |
+| `APP_ID` | Yes | -- | Discord application ID |
+| `PUBLIC_KEY` | Yes | -- | Discord application public key |
+| `PLAYLIST_LIMIT` | No | `50` | Max tracks loaded from a playlist (`0` = unlimited) |
+| `VOLUME` | No | `1.0` | Playback volume (`0.0` - `1.0`) |
+| `SPOTIFY_CLIENT_ID` | No | -- | Spotify app client ID |
+| `SPOTIFY_CLIENT_SECRET` | No | -- | Spotify app client secret |
+| `SUNO_ENABLED` | No | `false` | Enable Suno source support |
+| `FAVORITES_LIMIT` | No | `100` | Max favorites per user (`0` = unlimited) |
+| `DATABASE_PATH` | No | `database.db` | Path to the SQLite database file |
 
 ## Third-Party Licenses
 
-This project uses the following open-source libraries, all licensed under MIT:
+This project uses the following open-source libraries (all MIT-licensed):
+[Discord.Net](https://github.com/discord-net/Discord.Net),
+[YoutubeExplode](https://github.com/Tyrrrz/YoutubeExplode),
+[FFMpegCore](https://github.com/rosenbjerg/FFMpegCore),
+[DotNetEnv](https://github.com/tonerdo/dotnet-env),
+[SpotifyAPI-NET](https://github.com/JohnnyCrazy/SpotifyAPI-NET).
 
-- [Discord.Net](https://github.com/discord-net/Discord.Net) - Discord API client
-- [YoutubeExplode](https://github.com/Tyrrrz/YoutubeExplode) - YouTube data extraction
-- [FFMpegCore](https://github.com/rosenbjerg/FFMpegCore) - FFmpeg .NET wrapper
-- [DotNetEnv](https://github.com/tonerdo/dotnet-env) - .env file loader
-- [SpotifyAPI-NET](https://github.com/JohnnyCrazy/SpotifyAPI-NET) - Spotify Web API client
-
-Pre-built Docker images include FFmpeg, which is licensed under GPL v2+. The FFmpeg source code is available from the Debian package repository (https://packages.debian.org/source/ffmpeg). Your use of the Docker image is subject to FFmpeg's license terms. This project's own source code remains under the MIT License.
+Pre-built Docker images include [FFmpeg](https://packages.debian.org/source/ffmpeg) (GPL v2+). This project's own source code remains under the MIT License.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License. See [LICENSE](LICENSE) for details.
