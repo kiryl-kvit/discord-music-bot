@@ -1,10 +1,13 @@
 using System.Text.RegularExpressions;
+using DiscordMusicBot.Core.MusicSource.Options;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace DiscordMusicBot.Core.MusicSource.Suno;
 
 public sealed partial class SunoMetadataClient(
     HttpClient httpClient,
+    IOptionsMonitor<MusicSourcesOptions> options,
     ILogger<SunoMetadataClient> logger)
 {
     [GeneratedRegex(@"<title>(.+?)\s+by\s+(.+?)\s*\|\s*Suno</title>", RegexOptions.IgnoreCase)]
@@ -39,14 +42,14 @@ public sealed partial class SunoMetadataClient(
     }
 
     public async Task<IReadOnlyList<SunoTrack>> GetPlaylistTracksAsync(string playlistId,
-        int limit, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         try
         {
             var url = SunoTrack.GetPlaylistPageUrl(playlistId);
             var html = await FetchHtmlAsync(url, cancellationToken);
 
-            return string.IsNullOrEmpty(html) ? [] : ParsePlaylistPage(html, limit);
+            return string.IsNullOrEmpty(html) ? [] : ParsePlaylistPage(html);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -78,7 +81,7 @@ public sealed partial class SunoMetadataClient(
         return null;
     }
 
-    private static List<SunoTrack> ParsePlaylistPage(string html, int limit)
+    private List<SunoTrack> ParsePlaylistPage(string html)
     {
         var titlesBySongId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -106,7 +109,7 @@ public sealed partial class SunoMetadataClient(
 
         foreach (var songId in audioSongIds)
         {
-            if (tracks.Count >= limit)
+            if (options.CurrentValue.IsPlaylistLimitReached(tracks.Count))
             {
                 break;
             }
@@ -123,7 +126,7 @@ public sealed partial class SunoMetadataClient(
         // If og:audio tags were missing, fall back to song links from the HTML body.
         foreach (var (songId, title) in titlesBySongId)
         {
-            if (tracks.Count >= limit)
+            if (options.CurrentValue.IsPlaylistLimitReached(tracks.Count))
             {
                 break;
             }

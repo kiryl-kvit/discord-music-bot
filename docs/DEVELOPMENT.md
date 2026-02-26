@@ -23,7 +23,7 @@ Create a `.env` file in `DiscordMusicBot.App/`:
 BOT_TOKEN=your_bot_token
 APP_ID=your_application_id
 PUBLIC_KEY=your_public_key
-PLAYLIST_LIMIT=50
+PLAYLIST_LIMIT=50  # Set to 0 to disable the limit
 ```
 
 ### 3. Run locally

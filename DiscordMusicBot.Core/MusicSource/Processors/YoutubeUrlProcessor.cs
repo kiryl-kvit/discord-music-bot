@@ -61,12 +61,11 @@ public sealed class YoutubeUrlProcessor(
         CancellationToken cancellationToken)
     {
         var sources = new List<MusicSource>();
-        var limit = options.CurrentValue.PlaylistLimit;
         try
         {
             await foreach (var video in youtubeClient.Playlists.GetVideosAsync(playlistId, cancellationToken))
             {
-                if (sources.Count >= limit)
+                if (options.CurrentValue.IsPlaylistLimitReached(sources.Count))
                 {
                     break;
                 }
