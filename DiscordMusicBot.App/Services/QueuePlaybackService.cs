@@ -38,7 +38,8 @@ public sealed partial class QueuePlaybackService(
     public async Task<IReadOnlyCollection<PlayQueueItem>> GetQueueItemsAsync(ulong guildId, int skip = 0,
         int take = 10)
     {
-        return await queueRepository.GetPageAsync(guildId, skip, take);
+        var offset = GetState(guildId).CurrentItem is not null ? 1 : 0;
+        return await queueRepository.GetPageAsync(guildId, skip + offset, take);
     }
 
     public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items,
@@ -66,15 +67,18 @@ public sealed partial class QueuePlaybackService(
 
     public async Task<Result> ShuffleQueueAsync(ulong guildId)
     {
+        var state = GetState(guildId);
+        var currentItemId = state.CurrentItem?.Id;
+
         var count = await queueRepository.GetCountAsync(guildId);
-        if (count <= 1)
+        var shuffleableCount = currentItemId.HasValue ? count - 1 : count;
+        if (shuffleableCount <= 1)
         {
             return Result.Failure("Not enough items in the queue to shuffle.");
         }
 
-        await queueRepository.ShuffleAsync(guildId);
+        await queueRepository.ShuffleAsync(guildId, excludeItemId: currentItemId);
 
-        var state = GetState(guildId);
         state.ClearPrefetchedTrack();
         _ = PrefetchTrackAsync(guildId, CancellationToken.None);
 
@@ -141,19 +145,12 @@ public sealed partial class QueuePlaybackService(
 
         logger.LogInformation("Pausing queue playback in guild {GuildId}", guildId);
 
-        var currentItem = state.CurrentItem;
         state.CancelPlayback();
 
         if (state.PlaybackLoopTask is { } loopTask)
         {
             state.PlaybackLoopTask = null;
             await loopTask;
-        }
-
-        if (currentItem is not null)
-        {
-            await queueRepository.InsertAtFrontAsync(guildId, currentItem);
-            state.ResumeItemId = currentItem.Id;
         }
 
         await PersistStateAsync(guildId, state);
@@ -191,7 +188,7 @@ public sealed partial class QueuePlaybackService(
 
         var currentItem = state.CurrentItem;
         var nextItem = state.PrefetchedTrack is not null
-            ? await queueRepository.PeekNextAsync(guildId)
+            ? await queueRepository.PeekNextAsync(guildId, skip: 1)
             : null;
         state.ResetResumeState();
         state.TriggerSkip();
@@ -323,7 +320,7 @@ public sealed partial class QueuePlaybackService(
         {
             while (state.IsPlaying && !pauseToken.IsCancellationRequested)
             {
-                state.CurrentItem = await queueRepository.PopNextAsync(guildId);
+                state.CurrentItem = await queueRepository.PeekNextAsync(guildId);
                 var item = state.CurrentItem;
 
                 if (item is null)
@@ -345,6 +342,7 @@ public sealed partial class QueuePlaybackService(
                     await SendFeedbackAsync(guildId,
                         $"Skipping '{item.Title}'",
                         "Track has an invalid duration.");
+                    await queueRepository.DeleteByIdAsync(guildId, item.Id);
                     continue;
                 }
 
@@ -377,6 +375,8 @@ public sealed partial class QueuePlaybackService(
                     skipCts.Dispose();
                     state.SkipCts = null;
                 }
+
+                await queueRepository.DeleteByIdAsync(guildId, item.Id);
             }
         }
         catch (OperationCanceledException)
@@ -544,7 +544,7 @@ public sealed partial class QueuePlaybackService(
     {
         var state = GetState(guildId);
 
-        var nextItem = await queueRepository.PeekNextAsync(guildId);
+        var nextItem = await queueRepository.PeekNextAsync(guildId, skip: 1);
         if (nextItem is null)
         {
             return;
