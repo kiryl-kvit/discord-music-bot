@@ -9,6 +9,8 @@ using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Processors;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
+using DiscordMusicBot.Core.MusicSource.Search;
+using DiscordMusicBot.Core.MusicSource.Search.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Spotify;
 using DiscordMusicBot.Core.MusicSource.Suno;
 using Microsoft.Extensions.Configuration;
@@ -32,6 +34,8 @@ public static class ServicesConfiguration
         services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SupportedSources.YoutubeKey);
         services.AddScoped<IUrlProcessorFactory, UrlProcessorFactory>();
         services.AddSingleton<YoutubeClient>();
+
+        services.AddKeyedScoped<ISearchProvider, YoutubeSearchProvider>(SupportedSources.YoutubeKey);
 
         services.AddKeyedSingleton<IAudioStreamProvider, YoutubeAudioStreamProvider>(SupportedSources.YoutubeKey);
         services.AddSingleton<FfmpegAudioPipeline>();

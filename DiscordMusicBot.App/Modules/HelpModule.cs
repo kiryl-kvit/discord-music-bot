@@ -21,7 +21,7 @@ public sealed class HelpModule : InteractionModuleBase
                 "**Getting Started**\n" +
                 "1. Join a voice channel\n" +
                 "2. Use `/join` to bring the bot in\n" +
-                "3. Use `/queue add <url>` to add a track\n" +
+                "3. Use `/queue add <url>` or `/search <query>` to add a track\n" +
                 "Playback starts automatically when the bot is connected and tracks are queued.")
             .AddField("Voice",
                 "`/join` — Join your current voice channel\n" +
@@ -39,6 +39,8 @@ public sealed class HelpModule : InteractionModuleBase
                 "`/fav list [page]` — Show your favorites\n" +
                 "`/fav remove <favorite>` — Remove a favorite\n" +
                 "`/fav rename <favorite> <new_name>` — Rename a favorite")
+            .AddField("Search",
+                "`/search <query>` — Search YouTube and pick a track to enqueue")
             .AddField("Other",
                 "`/now` — Show the currently playing track\n" +
                 "`/help` — Show this help message")
