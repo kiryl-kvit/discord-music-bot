@@ -2,6 +2,13 @@
 
 A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/discord-net/Discord.Net).
 
+## Features
+
+- **Favorites** -- save, list, rename, and remove favorite tracks per user
+- **State persistence** -- survives crashes and restarts by saving playback position, voice channel, and queue to a SQLite database, then auto-resuming where it left off
+- **Track prefetching** -- resolves the next track's audio stream while the current one is still playing for gapless transitions
+- **Hot-reload configuration** -- watches the `.env` file for changes and applies them without restarting the bot
+
 ## Supported Sources
 
 | Source        | Supported Links           | Setup                                        |
