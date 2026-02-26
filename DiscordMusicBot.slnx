@@ -12,7 +12,6 @@
   <Folder Name="/Solution Items/.github/" />
   <Folder Name="/Solution Items/.github/workflows/">
     <File Path=".github/workflows/ci.yml" />
-    <File Path=".github/workflows/draft-release.yml" />
     <File Path=".github/workflows/publish-release.yml" />
   </Folder>
 </Solution>
