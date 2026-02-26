@@ -134,7 +134,7 @@ public sealed class QueueModule(
     {
         var guildId = Context.Guild.Id;
 
-        await DeferAsync(ephemeral: true);
+        await DeferAsync();
 
         var result = await queuePlaybackService.ShuffleQueueAsync(guildId);
 
@@ -148,7 +148,8 @@ public sealed class QueueModule(
         }
 
         logger.LogInformation("Queue shuffled in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
-        await ModifyOriginalResponseAsync(props => props.Content = "Queue shuffled.");
+        await ModifyOriginalResponseAsync(props =>
+            props.Content = $"{Context.User.Mention} shuffled the queue.");
     }
 
     [SlashCommand("resume", "Resume queue playback")]
@@ -162,11 +163,12 @@ public sealed class QueueModule(
             return;
         }
 
-        await DeferAsync(ephemeral: true);
+        await DeferAsync();
 
         await queuePlaybackService.StartAsync(guildId, Context.Channel);
 
-        await ModifyOriginalResponseAsync(props => props.Content = "Queue started.");
+        await ModifyOriginalResponseAsync(props =>
+            props.Content = $"{Context.User.Mention} resumed the queue.");
     }
 
     [SlashCommand("pause", "Pause queue playback")]
@@ -180,10 +182,11 @@ public sealed class QueueModule(
             return;
         }
 
-        await DeferAsync(ephemeral: true);
+        await DeferAsync();
 
         await queuePlaybackService.PauseAsync(guildId);
-        await ModifyOriginalResponseAsync(props => props.Content = "Queue paused.");
+        await ModifyOriginalResponseAsync(props =>
+            props.Content = $"{Context.User.Mention} paused the queue.");
     }
 
     [SlashCommand("clear", "Clear all items from the queue")]
@@ -191,12 +194,13 @@ public sealed class QueueModule(
     {
         var guildId = Context.Guild.Id;
 
-        await DeferAsync(ephemeral: true);
+        await DeferAsync();
 
         await queuePlaybackService.ClearQueueAsync(guildId);
 
         logger.LogInformation("Queue cleared in guild {GuildId} by user {UserId}", guildId, Context.User.Id);
-        await ModifyOriginalResponseAsync(props => props.Content = "Queue cleared.");
+        await ModifyOriginalResponseAsync(props =>
+            props.Content = $"{Context.User.Mention} cleared the queue.");
     }
 
     [SlashCommand("skip", "Skip one or more tracks")]
