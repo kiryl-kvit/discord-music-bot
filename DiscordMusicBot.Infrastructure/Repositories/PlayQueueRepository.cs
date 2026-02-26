@@ -1,3 +1,4 @@
+using System.Text;
 using Dapper;
 using DiscordMusicBot.Domain.PlayQueue;
 using DiscordMusicBot.Infrastructure.Database;
@@ -24,28 +25,42 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             transaction);
 
         var nextPosition = (maxPosition ?? -1) + 1;
+        var guildIdStr = guildId.ToString();
 
-        foreach (var item in items)
+        var sb = new StringBuilder();
+        sb.Append("INSERT INTO play_queue_items (guild_id, user_id, url, title, author, duration_ms, position) VALUES ");
+
+        var parameters = new DynamicParameters();
+        parameters.Add("GuildId", guildIdStr);
+
+        for (var i = 0; i < items.Count; i++)
         {
-            var id = await connection.ExecuteScalarAsync<long>(
-                """
-                INSERT INTO play_queue_items (guild_id, user_id, url, title, author, duration_ms, position)
-                VALUES (@GuildId, @UserId, @Url, @Title, @Author, @DurationMs, @Position);
-                SELECT last_insert_rowid();
-                """,
-                new
-                {
-                    GuildId = guildId.ToString(),
-                    UserId = item.UserId.ToString(),
-                    item.Url,
-                    item.Title,
-                    item.Author,
-                    DurationMs = item.Duration.HasValue ? (long?)item.Duration.Value.TotalMilliseconds : null,
-                    Position = nextPosition++,
-                },
-                transaction);
+            if (i > 0) sb.Append(", ");
+            sb.Append($"(@GuildId, @UserId{i}, @Url{i}, @Title{i}, @Author{i}, @DurationMs{i}, @Position{i})");
 
-            item.SetId(id);
+            var item = items[i];
+            parameters.Add($"UserId{i}", item.UserId.ToString());
+            parameters.Add($"Url{i}", item.Url);
+            parameters.Add($"Title{i}", item.Title);
+            parameters.Add($"Author{i}", item.Author);
+            parameters.Add($"DurationMs{i}", item.Duration.HasValue ? (long?)item.Duration.Value.TotalMilliseconds : null);
+            parameters.Add($"Position{i}", nextPosition + i);
+        }
+
+        await connection.ExecuteAsync(sb.ToString(), parameters, transaction);
+
+        var ids = (await connection.QueryAsync<long>(
+            """
+            SELECT id FROM play_queue_items
+            WHERE guild_id = @GuildId AND position >= @StartPosition
+            ORDER BY position
+            """,
+            new { GuildId = guildIdStr, StartPosition = nextPosition },
+            transaction)).AsList();
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            items[i].SetId(ids[i]);
         }
 
         await transaction.CommitAsync();
@@ -106,13 +121,29 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
 
         var positionOffset = excludeItemId.HasValue ? 1 : 0;
 
+        var sb = new StringBuilder();
+        sb.Append("UPDATE play_queue_items SET position = CASE id ");
+
+        var parameters = new DynamicParameters();
+        parameters.Add("GuildId", guildId.ToString());
+
         for (var i = 0; i < ids.Count; i++)
         {
-            await connection.ExecuteAsync(
-                "UPDATE play_queue_items SET position = @Position WHERE id = @Id",
-                new { Position = i + positionOffset, Id = ids[i] },
-                transaction);
+            sb.Append($"WHEN @Id{i} THEN @Pos{i} ");
+            parameters.Add($"Id{i}", ids[i]);
+            parameters.Add($"Pos{i}", i + positionOffset);
         }
+
+        sb.Append("END WHERE guild_id = @GuildId AND id IN (");
+        for (var i = 0; i < ids.Count; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append($"@Id{i}");
+        }
+
+        sb.Append(')');
+
+        await connection.ExecuteAsync(sb.ToString(), parameters, transaction);
 
         await transaction.CommitAsync();
     }
