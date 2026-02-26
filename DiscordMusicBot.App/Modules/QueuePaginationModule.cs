@@ -3,7 +3,7 @@ using DiscordMusicBot.App.Services;
 
 namespace DiscordMusicBot.App.Modules;
 
-public class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : InteractionModuleBase
+public sealed class QueuePaginationModule(QueuePlaybackService queuePlaybackService) : InteractionModuleBase
 {
     [ComponentInteraction("queue:page:*")]
     public async Task HandlePageAsync(int page)

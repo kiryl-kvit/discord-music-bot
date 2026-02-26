@@ -3,7 +3,7 @@ using Discord.Interactions;
 
 namespace DiscordMusicBot.App.Modules;
 
-public class HelpModule : InteractionModuleBase
+public sealed class HelpModule : InteractionModuleBase
 {
     [SlashCommand("help", "Show a list of all available commands")]
     public async Task HelpAsync()
