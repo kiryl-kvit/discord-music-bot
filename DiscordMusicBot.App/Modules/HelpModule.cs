@@ -21,13 +21,16 @@ public class HelpModule : InteractionModuleBase
             .AddField("/help", "Show this help message.", inline: false)
             .AddField("/join", "Join the voice channel you are currently in.", inline: false)
             .AddField("/leave", "Leave the current voice channel.", inline: false)
-            .AddField("/queue add `<url>`", "Add a YouTube video or playlist to the queue.", inline: false)
+            .AddField("/queue add `<url>`", "Add a URL or a favorite to the queue. Start typing to see your favorites.", inline: false)
             .AddField("/queue resume", "Resume queue playback.", inline: false)
             .AddField("/queue pause", "Pause queue playback.", inline: false)
             .AddField("/queue shuffle", "Shuffle the current queue.", inline: false)
             .AddField("/queue skip `[count]`", "Skip one or more tracks. Defaults to 1.", inline: false)
             .AddField("/queue list `[page]`", "Show the current queue with pagination.", inline: false)
             .AddField("/queue clear", "Clear all items from the queue.", inline: false)
+            .AddField("/fav add `<url>` `[alias]`", "Save a track or playlist to your favorites.", inline: false)
+            .AddField("/fav list `[page]`", "Show your favorites with pagination.", inline: false)
+            .AddField("/fav remove `<favorite>`", "Remove a favorite by name (autocomplete).", inline: false)
             .Build();
     }
 }
