@@ -2,11 +2,11 @@ namespace DiscordMusicBot.Domain.PlayQueue;
 
 public interface IPlayQueueRepository
 {
-    Task AddItemsAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items);
-    Task<PlayQueueItem?> PeekNextAsync(ulong guildId, int skip = 0);
-    Task DeleteByIdAsync(ulong guildId, long itemId);
-    Task ShuffleAsync(ulong guildId, long? excludeItemId = null);
-    Task ClearAsync(ulong guildId);
-    Task<IReadOnlyList<PlayQueueItem>> GetPageAsync(ulong guildId, int skip, int take);
-    Task<int> GetCountAsync(ulong guildId);
+    Task AddItemsAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items, CancellationToken cancellationToken = default);
+    Task<PlayQueueItem?> PeekNextAsync(ulong guildId, int skip = 0, CancellationToken cancellationToken = default);
+    Task DeleteByIdAsync(ulong guildId, long itemId, CancellationToken cancellationToken = default);
+    Task ShuffleAsync(ulong guildId, long? excludeItemId = null, CancellationToken cancellationToken = default);
+    Task ClearAsync(ulong guildId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlayQueueItem>> GetPageAsync(ulong guildId, int skip, int take, CancellationToken cancellationToken = default);
+    Task<int> GetCountAsync(ulong guildId, CancellationToken cancellationToken = default);
 }

@@ -8,7 +8,8 @@ namespace DiscordMusicBot.Infrastructure.Repositories;
 
 public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactory) : IPlayQueueRepository
 {
-    public async Task AddItemsAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items)
+    public async Task AddItemsAsync(ulong guildId, IReadOnlyList<PlayQueueItem> items,
+        CancellationToken cancellationToken = default)
     {
         if (items.Count == 0)
         {
@@ -16,13 +17,15 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         }
 
         await using var connection = connectionFactory.CreateConnection();
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         var maxPosition = await connection.ExecuteScalarAsync<int?>(
-            "SELECT MAX(position) FROM play_queue_items WHERE guild_id = @GuildId",
-            new { GuildId = guildId.ToString() },
-            transaction);
+            new CommandDefinition(
+                "SELECT MAX(position) FROM play_queue_items WHERE guild_id = @GuildId",
+                new { GuildId = guildId.ToString() },
+                transaction: transaction,
+                cancellationToken: cancellationToken));
 
         var nextPosition = (maxPosition ?? -1) + 1;
         var guildIdStr = guildId.ToString();
@@ -47,65 +50,78 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             parameters.Add($"Position{i}", nextPosition + i);
         }
 
-        await connection.ExecuteAsync(sb.ToString(), parameters, transaction);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                sb.ToString(), parameters, transaction: transaction, cancellationToken: cancellationToken));
 
         var ids = (await connection.QueryAsync<long>(
-            """
-            SELECT id FROM play_queue_items
-            WHERE guild_id = @GuildId AND position >= @StartPosition
-            ORDER BY position
-            """,
-            new { GuildId = guildIdStr, StartPosition = nextPosition },
-            transaction)).AsList();
+            new CommandDefinition(
+                """
+                SELECT id FROM play_queue_items
+                WHERE guild_id = @GuildId AND position >= @StartPosition
+                ORDER BY position
+                """,
+                new { GuildId = guildIdStr, StartPosition = nextPosition },
+                transaction: transaction,
+                cancellationToken: cancellationToken))).AsList();
 
         for (var i = 0; i < items.Count; i++)
         {
             items[i].SetId(ids[i]);
         }
 
-        await transaction.CommitAsync();
+        await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task<PlayQueueItem?> PeekNextAsync(ulong guildId, int skip = 0)
+    public async Task<PlayQueueItem?> PeekNextAsync(ulong guildId, int skip = 0,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
 
         var row = await connection.QueryFirstOrDefaultAsync<PlayQueueItemRow>(
-            """
-            SELECT id, guild_id, user_id, url, title, author, duration_ms, position
-            FROM play_queue_items
-            WHERE guild_id = @GuildId
-            ORDER BY position
-            LIMIT 1 OFFSET @Skip
-            """,
-            new { GuildId = guildId.ToString(), Skip = skip });
+            new CommandDefinition(
+                """
+                SELECT id, guild_id, user_id, url, title, author, duration_ms, position
+                FROM play_queue_items
+                WHERE guild_id = @GuildId
+                ORDER BY position
+                LIMIT 1 OFFSET @Skip
+                """,
+                new { GuildId = guildId.ToString(), Skip = skip },
+                cancellationToken: cancellationToken));
 
         return row?.ToPlayQueueItem();
     }
 
-    public async Task DeleteByIdAsync(ulong guildId, long itemId)
+    public async Task DeleteByIdAsync(ulong guildId, long itemId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
 
         await connection.ExecuteAsync(
-            "DELETE FROM play_queue_items WHERE id = @Id AND guild_id = @GuildId",
-            new { Id = itemId, GuildId = guildId.ToString() });
+            new CommandDefinition(
+                "DELETE FROM play_queue_items WHERE id = @Id AND guild_id = @GuildId",
+                new { Id = itemId, GuildId = guildId.ToString() },
+                cancellationToken: cancellationToken));
     }
 
-    public async Task ShuffleAsync(ulong guildId, long? excludeItemId = null)
+    public async Task ShuffleAsync(ulong guildId, long? excludeItemId = null,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
-        await connection.OpenAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         var ids = (await connection.QueryAsync<long>(
-            """
-            SELECT id FROM play_queue_items
-            WHERE guild_id = @GuildId AND (@ExcludeId IS NULL OR id != @ExcludeId)
-            ORDER BY position
-            """,
-            new { GuildId = guildId.ToString(), ExcludeId = excludeItemId },
-            transaction)).ToList();
+            new CommandDefinition(
+                """
+                SELECT id FROM play_queue_items
+                WHERE guild_id = @GuildId AND (@ExcludeId IS NULL OR id != @ExcludeId)
+                ORDER BY position
+                """,
+                new { GuildId = guildId.ToString(), ExcludeId = excludeItemId },
+                transaction: transaction,
+                cancellationToken: cancellationToken))).ToList();
 
         if (ids.Count <= 1)
         {
@@ -143,43 +159,52 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
 
         sb.Append(')');
 
-        await connection.ExecuteAsync(sb.ToString(), parameters, transaction);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                sb.ToString(), parameters, transaction: transaction, cancellationToken: cancellationToken));
 
-        await transaction.CommitAsync();
+        await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task ClearAsync(ulong guildId)
+    public async Task ClearAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
 
         await connection.ExecuteAsync(
-            "DELETE FROM play_queue_items WHERE guild_id = @GuildId",
-            new { GuildId = guildId.ToString() });
+            new CommandDefinition(
+                "DELETE FROM play_queue_items WHERE guild_id = @GuildId",
+                new { GuildId = guildId.ToString() },
+                cancellationToken: cancellationToken));
     }
 
-    public async Task<IReadOnlyList<PlayQueueItem>> GetPageAsync(ulong guildId, int skip, int take)
+    public async Task<IReadOnlyList<PlayQueueItem>> GetPageAsync(ulong guildId, int skip, int take,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
 
         var rows = await connection.QueryAsync<PlayQueueItemRow>(
-            """
-            SELECT id, guild_id, user_id, url, title, author, duration_ms, position
-            FROM play_queue_items
-            WHERE guild_id = @GuildId
-            ORDER BY position
-            LIMIT @Take OFFSET @Skip
-            """,
-            new { GuildId = guildId.ToString(), Take = take, Skip = skip });
+            new CommandDefinition(
+                """
+                SELECT id, guild_id, user_id, url, title, author, duration_ms, position
+                FROM play_queue_items
+                WHERE guild_id = @GuildId
+                ORDER BY position
+                LIMIT @Take OFFSET @Skip
+                """,
+                new { GuildId = guildId.ToString(), Take = take, Skip = skip },
+                cancellationToken: cancellationToken));
 
         return rows.Select(r => r.ToPlayQueueItem()).ToArray();
     }
 
-    public async Task<int> GetCountAsync(ulong guildId)
+    public async Task<int> GetCountAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
 
         return await connection.ExecuteScalarAsync<int>(
-            "SELECT COUNT(*) FROM play_queue_items WHERE guild_id = @GuildId",
-            new { GuildId = guildId.ToString() });
+            new CommandDefinition(
+                "SELECT COUNT(*) FROM play_queue_items WHERE guild_id = @GuildId",
+                new { GuildId = guildId.ToString() },
+                cancellationToken: cancellationToken));
     }
 }

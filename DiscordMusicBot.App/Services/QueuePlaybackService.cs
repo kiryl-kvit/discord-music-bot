@@ -36,14 +36,14 @@ public sealed partial class QueuePlaybackService(
     }
 
     public async Task<IReadOnlyCollection<PlayQueueItem>> GetQueueItemsAsync(ulong guildId, int skip = 0,
-        int take = 10)
+        int take = 10, CancellationToken cancellationToken = default)
     {
         var offset = GetState(guildId).CurrentItem is not null ? 1 : 0;
-        return await queueRepository.GetPageAsync(guildId, skip + offset, take);
+        return await queueRepository.GetPageAsync(guildId, skip + offset, take, cancellationToken);
     }
 
     public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items,
-        IMessageChannel? feedbackChannel = null)
+        IMessageChannel? feedbackChannel = null, CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
 
@@ -53,11 +53,11 @@ public sealed partial class QueuePlaybackService(
         }
 
         var itemsList = items as IReadOnlyList<PlayQueueItem> ?? items.ToArray();
-        await queueRepository.AddItemsAsync(guildId, itemsList);
+        await queueRepository.AddItemsAsync(guildId, itemsList, cancellationToken);
 
         if (state is { IsPlaying: false, IsConnected: true })
         {
-            await StartAsync(guildId);
+            await StartAsync(guildId, cancellationToken: cancellationToken);
         }
         else if (!state.IsPlaying)
         {
@@ -65,19 +65,20 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    public async Task<Result> ShuffleQueueAsync(ulong guildId)
+    public async Task<Result> ShuffleQueueAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
         var currentItemId = state.CurrentItem?.Id;
 
-        var count = await queueRepository.GetCountAsync(guildId);
+        var count = await queueRepository.GetCountAsync(guildId, cancellationToken);
         var shuffleableCount = currentItemId.HasValue ? count - 1 : count;
         if (shuffleableCount <= 1)
         {
             return Result.Failure("Not enough items in the queue to shuffle.");
         }
 
-        await queueRepository.ShuffleAsync(guildId, excludeItemId: currentItemId);
+        await queueRepository.ShuffleAsync(guildId, excludeItemId: currentItemId,
+            cancellationToken: cancellationToken);
 
         state.ClearPrefetchedTrack();
         _ = PrefetchTrackAsync(guildId, CancellationToken.None);
@@ -85,14 +86,14 @@ public sealed partial class QueuePlaybackService(
         return Result.Success();
     }
 
-    public async Task ClearQueueAsync(ulong guildId)
+    public async Task ClearQueueAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
 
         if (state.IsPlaying)
         {
             var loopTask = state.PlaybackLoopTask;
-            await FullStopAsync(guildId);
+            await FullStopAsync(guildId, cancellationToken);
             if (loopTask is not null)
             {
                 await loopTask;
@@ -101,11 +102,12 @@ public sealed partial class QueuePlaybackService(
 
         state.ResetResumeState();
         state.ClearPrefetchedTrack();
-        await queueRepository.ClearAsync(guildId);
-        await ClearPersistedStateAsync(guildId);
+        await queueRepository.ClearAsync(guildId, cancellationToken);
+        await ClearPersistedStateAsync(guildId, cancellationToken);
     }
 
-    public async Task StartAsync(ulong guildId, IMessageChannel? feedbackChannel = null)
+    public async Task StartAsync(ulong guildId, IMessageChannel? feedbackChannel = null,
+        CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
 
@@ -120,7 +122,7 @@ public sealed partial class QueuePlaybackService(
             return;
         }
 
-        var count = await queueRepository.GetCountAsync(guildId);
+        var count = await queueRepository.GetCountAsync(guildId, cancellationToken);
         if (count == 0)
         {
             logger.LogInformation("Queue is empty in guild {GuildId}, nothing to start", guildId);
@@ -135,7 +137,7 @@ public sealed partial class QueuePlaybackService(
         state.PlaybackLoopTask = RunAdvancementLoopAsync(guildId);
     }
 
-    public async Task PauseAsync(ulong guildId)
+    public async Task PauseAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
         if (!_states.TryGetValue(guildId, out var state) || !state.IsPlaying)
         {
@@ -153,13 +155,13 @@ public sealed partial class QueuePlaybackService(
             await loopTask;
         }
 
-        await PersistStateAsync(guildId, state);
+        await PersistStateAsync(guildId, state, cancellationToken);
 
         state.ClearPrefetchedTrack();
-        await ClearActivityAsync();
+        await ClearActivityAsync(cancellationToken);
     }
 
-    private async Task FullStopAsync(ulong guildId)
+    private async Task FullStopAsync(ulong guildId, CancellationToken cancellationToken)
     {
         var state = GetState(guildId);
         if (!state.IsPlaying)
@@ -171,11 +173,12 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Resetting queue playback in guild {GuildId}", guildId);
 
         state.FullReset();
-        await ClearPersistedStateAsync(guildId);
-        await ClearActivityAsync();
+        await ClearPersistedStateAsync(guildId, cancellationToken);
+        await ClearActivityAsync(cancellationToken);
     }
 
-    public async Task<(PlayQueueItem? Skipped, PlayQueueItem? Next)> SkipAsync(ulong guildId)
+    public async Task<(PlayQueueItem? Skipped, PlayQueueItem? Next)> SkipAsync(ulong guildId,
+        CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
         if (!state.IsPlaying)
@@ -188,7 +191,7 @@ public sealed partial class QueuePlaybackService(
 
         var currentItem = state.CurrentItem;
         var nextItem = state.PrefetchedTrack is not null
-            ? await queueRepository.PeekNextAsync(guildId, skip: 1)
+            ? await queueRepository.PeekNextAsync(guildId, skip: 1, cancellationToken: cancellationToken)
             : null;
         state.ResetResumeState();
         state.TriggerSkip();
@@ -196,7 +199,7 @@ public sealed partial class QueuePlaybackService(
         return (currentItem, nextItem);
     }
 
-    public async Task GracefulStopAsync()
+    public async Task GracefulStopAsync(CancellationToken cancellationToken = default)
     {
         var playingGuildIds = _states
             .Where(kvp => kvp.Value.IsPlaying)
@@ -214,7 +217,7 @@ public sealed partial class QueuePlaybackService(
         {
             try
             {
-                await PauseAsync(guildId);
+                await PauseAsync(guildId, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -223,13 +226,13 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    public async Task RestoreAsync()
+    public async Task RestoreAsync(CancellationToken cancellationToken = default)
     {
         IReadOnlyList<PersistedGuildState> persisted;
 
         try
         {
-            persisted = await stateRepository.GetAllAsync();
+            persisted = await stateRepository.GetAllAsync(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -247,11 +250,11 @@ public sealed partial class QueuePlaybackService(
 
         foreach (var saved in persisted)
         {
-            await RestoreGuildAsync(saved);
+            await RestoreGuildAsync(saved, cancellationToken);
         }
     }
 
-    private async Task RestoreGuildAsync(PersistedGuildState saved)
+    private async Task RestoreGuildAsync(PersistedGuildState saved, CancellationToken cancellationToken)
     {
         var guildId = saved.GuildId;
 
@@ -261,7 +264,7 @@ public sealed partial class QueuePlaybackService(
             if (guild is null)
             {
                 logger.LogWarning("Guild {GuildId} not found during restore; clearing persisted state", guildId);
-                await ClearPersistedStateAsync(guildId);
+                await ClearPersistedStateAsync(guildId, cancellationToken);
                 return;
             }
 
@@ -271,16 +274,16 @@ public sealed partial class QueuePlaybackService(
                 logger.LogWarning(
                     "Voice channel {ChannelId} not found in guild {GuildId} during restore; clearing persisted state",
                     saved.VoiceChannelId, guildId);
-                await ClearPersistedStateAsync(guildId);
+                await ClearPersistedStateAsync(guildId, cancellationToken);
                 return;
             }
 
-            var queueCount = await queueRepository.GetCountAsync(guildId);
+            var queueCount = await queueRepository.GetCountAsync(guildId, cancellationToken);
             if (queueCount == 0)
             {
                 logger.LogInformation("Queue is empty for guild {GuildId} during restore; clearing persisted state",
                     guildId);
-                await ClearPersistedStateAsync(guildId);
+                await ClearPersistedStateAsync(guildId, cancellationToken);
                 return;
             }
 
@@ -297,12 +300,12 @@ public sealed partial class QueuePlaybackService(
                 "Restoring guild {GuildId}: joining voice channel {ChannelId}, resume position {ResumePosition}",
                 guildId, saved.VoiceChannelId, saved.ResumePosition);
 
-            await voiceConnectionService.JoinAsync(voiceChannel);
+            await voiceConnectionService.JoinAsync(voiceChannel, cancellationToken);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to restore playback state for guild {GuildId}", guildId);
-            await ClearPersistedStateAsync(guildId);
+            await ClearPersistedStateAsync(guildId, cancellationToken);
         }
     }
 
@@ -320,20 +323,21 @@ public sealed partial class QueuePlaybackService(
         {
             while (state.IsPlaying && !pauseToken.IsCancellationRequested)
             {
-                state.CurrentItem = await queueRepository.PeekNextAsync(guildId);
+                state.CurrentItem = await queueRepository.PeekNextAsync(guildId,
+                    cancellationToken: pauseToken);
                 var item = state.CurrentItem;
 
                 if (item is null)
                 {
                     logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
-                    await FullStopAsync(guildId);
+                    await FullStopAsync(guildId, pauseToken);
                     break;
                 }
 
                 logger.LogInformation("Now playing: '{Title}' by {Author} ({Duration}) in guild {GuildId}",
                     item.Title, item.Author ?? "Unknown", item.Duration, guildId);
 
-                await SetActivityAsync(item.Title);
+                await SetActivityAsync(item.Title, pauseToken);
 
                 if (item.Duration is { } d && d <= TimeSpan.Zero)
                 {
@@ -341,8 +345,9 @@ public sealed partial class QueuePlaybackService(
                         item.Title, guildId);
                     await SendFeedbackAsync(guildId,
                         $"Skipping '{item.Title}'",
-                        "Track has an invalid duration.");
-                    await queueRepository.DeleteByIdAsync(guildId, item.Id);
+                        "Track has an invalid duration.",
+                        pauseToken);
+                    await queueRepository.DeleteByIdAsync(guildId, item.Id, pauseToken);
                     continue;
                 }
 
@@ -368,7 +373,8 @@ public sealed partial class QueuePlaybackService(
                                           "Skipping to next track.", item.Title, guildId);
                     await SendFeedbackAsync(guildId,
                         $"Error playing '{item.Title}'",
-                        "An error occurred during playback. Skipping to next track.");
+                        "An error occurred during playback. Skipping to next track.",
+                        pauseToken);
                 }
                 finally
                 {
@@ -376,7 +382,7 @@ public sealed partial class QueuePlaybackService(
                     state.SkipCts = null;
                 }
 
-                await queueRepository.DeleteByIdAsync(guildId, item.Id);
+                await queueRepository.DeleteByIdAsync(guildId, item.Id, pauseToken);
             }
         }
         catch (OperationCanceledException)
@@ -387,11 +393,12 @@ public sealed partial class QueuePlaybackService(
         {
             logger.LogError(ex, "Unexpected error in queue advancement loop for guild {GuildId}", guildId);
             state.FullReset();
-            await ClearPersistedStateAsync(guildId);
-            await ClearActivityAsync();
+            await ClearPersistedStateAsync(guildId, CancellationToken.None);
+            await ClearActivityAsync(CancellationToken.None);
             await SendFeedbackAsync(guildId,
                 "Playback stopped unexpectedly",
-                "An unexpected error interrupted playback. Use `/queue resume` to restart.");
+                "An unexpected error interrupted playback. Use `/queue resume` to restart.",
+                CancellationToken.None);
         }
     }
 
@@ -420,7 +427,8 @@ public sealed partial class QueuePlaybackService(
         {
             await SendFeedbackAsync(guildId,
                 $"Failed to play '{item.Title}'",
-                $"{streamResult.ErrorMessage}. Skipping to next track.");
+                $"{streamResult.ErrorMessage}. Skipping to next track.",
+                pauseToken);
             return;
         }
 
@@ -544,7 +552,8 @@ public sealed partial class QueuePlaybackService(
     {
         var state = GetState(guildId);
 
-        var nextItem = await queueRepository.PeekNextAsync(guildId, skip: 1);
+        var nextItem = await queueRepository.PeekNextAsync(guildId, skip: 1,
+            cancellationToken: cancellationToken);
         if (nextItem is null)
         {
             return;
@@ -586,7 +595,8 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private async Task PersistStateAsync(ulong guildId, GuildPlaybackState state)
+    private async Task PersistStateAsync(ulong guildId, GuildPlaybackState state,
+        CancellationToken cancellationToken)
     {
         var voiceChannelId = voiceConnectionService.GetVoiceChannelId(guildId) ?? state.VoiceChannelId;
         if (voiceChannelId is null)
@@ -603,7 +613,7 @@ public sealed partial class QueuePlaybackService(
                 voiceChannelId.Value,
                 feedbackChannelId,
                 state.ResumePosition,
-                state.ResumeItemId));
+                state.ResumeItemId), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -611,11 +621,11 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private async Task ClearPersistedStateAsync(ulong guildId)
+    private async Task ClearPersistedStateAsync(ulong guildId, CancellationToken cancellationToken)
     {
         try
         {
-            await stateRepository.DeleteAsync(guildId);
+            await stateRepository.DeleteAsync(guildId, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -623,7 +633,7 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private async Task SetActivityAsync(string trackTitle)
+    private async Task SetActivityAsync(string trackTitle, CancellationToken cancellationToken)
     {
         try
         {
@@ -635,7 +645,7 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private async Task ClearActivityAsync()
+    private async Task ClearActivityAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -647,7 +657,8 @@ public sealed partial class QueuePlaybackService(
         }
     }
 
-    private async Task SendFeedbackAsync(ulong guildId, string title, string description)
+    private async Task SendFeedbackAsync(ulong guildId, string title, string description,
+        CancellationToken cancellationToken)
     {
         var channel = GetState(guildId).FeedbackChannel;
         if (channel is null)
@@ -663,7 +674,8 @@ public sealed partial class QueuePlaybackService(
                 .WithDescription(description)
                 .Build();
 
-            await channel.SendMessageAsync(embed: embed);
+            await channel.SendMessageAsync(embed: embed,
+                options: new RequestOptions { CancelToken = cancellationToken });
         }
         catch (Exception ex)
         {

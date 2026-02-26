@@ -14,7 +14,8 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
     public event Func<ulong, Task>? Connected;
     public event Func<ulong, Task>? Disconnected;
 
-    public async Task<IAudioClient> JoinAsync(IVoiceChannel channel)
+    public async Task<IAudioClient> JoinAsync(IVoiceChannel channel,
+        CancellationToken cancellationToken = default)
     {
         var guildId = channel.GuildId;
 
@@ -33,12 +34,17 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         logger.LogInformation("Joining voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(10));
         IAudioClient audioClient;
 
         try
         {
             audioClient = await channel.ConnectAsync(selfDeaf: true).WaitAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (OperationCanceledException)
         {
@@ -59,7 +65,7 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         return audioClient;
     }
 
-    public async Task LeaveAsync(IVoiceChannel channel)
+    public async Task LeaveAsync(IVoiceChannel channel, CancellationToken cancellationToken = default)
     {
         var guildId = channel.GuildId;
 
@@ -112,7 +118,7 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         return _connections.TryGetValue(guildId, out var connection) ? connection.ChannelId : null;
     }
 
-    public async Task DisconnectAsync(ulong guildId)
+    public async Task DisconnectAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
         if (!_connections.TryRemove(guildId, out var connection))
         {
@@ -130,13 +136,13 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         }
     }
 
-    public async Task DisconnectAllAsync()
+    public async Task DisconnectAllAsync(CancellationToken cancellationToken = default)
     {
         var guildIds = _connections.Keys.ToArray();
 
         foreach (var guildId in guildIds)
         {
-            await DisconnectAsync(guildId);
+            await DisconnectAsync(guildId, cancellationToken);
         }
     }
 

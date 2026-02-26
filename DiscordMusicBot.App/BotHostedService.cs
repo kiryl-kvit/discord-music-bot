@@ -31,7 +31,7 @@ public sealed class BotHostedService(
 
         discordClient.Ready += OnReadyAsync;
 
-        await interactionHandler.InitializeAsync();
+        await interactionHandler.InitializeAsync(cancellationToken);
 
         await discordClient.LoginAsync(TokenType.Bot, botSettings.Value.BotToken);
         await discordClient.StartAsync();
@@ -43,8 +43,8 @@ public sealed class BotHostedService(
     {
         logger.LogInformation("Bot is shutting down");
 
-        await queuePlaybackService.GracefulStopAsync();
-        await voiceConnectionService.DisconnectAllAsync();
+        await queuePlaybackService.GracefulStopAsync(cancellationToken);
+        await voiceConnectionService.DisconnectAllAsync(cancellationToken);
         await discordClient.StopAsync();
 
         logger.LogInformation("Bot stopped");
