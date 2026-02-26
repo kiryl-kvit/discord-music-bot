@@ -27,8 +27,9 @@ public static class QueueEmbedBuilder
         }
         else
         {
-            var lines = items.Select((item, index) => FormatQueueLine(item, page, pageSize, index));
-            builder.AddField("Up Next", string.Join('\n', lines));
+            var lines = items.Select((item, index) => FormatQueueLine(item, page, pageSize, index)).ToList();
+            var fieldValue = TruncateToFieldLimit(lines);
+            builder.AddField("Up Next", fieldValue);
         }
 
         var totalPages = stats.Count == 0 ? 1 : (int)Math.Ceiling((double)stats.Count / pageSize);
@@ -50,6 +51,36 @@ public static class QueueEmbedBuilder
             ? DateFormatter.FormatTime(item.Duration.Value)
             : DisplayConstants.UnknownDuration;
         return $"`{position}.` **{item.Title}** - {item.Author ?? DisplayConstants.UnknownAuthor} `[{duration}]` - added by {DiscordFormatter.MentionUser(item.UserId)}";
+    }
+
+    private static string TruncateToFieldLimit(List<string> lines)
+    {
+        const int maxLength = 1024;
+        const string ellipsis = "\n*...list truncated*";
+
+        var result = string.Join('\n', lines);
+        if (result.Length <= maxLength)
+        {
+            return result;
+        }
+
+        var budget = maxLength - ellipsis.Length;
+        var length = 0;
+        var count = 0;
+
+        foreach (var line in lines)
+        {
+            var needed = count == 0 ? line.Length : line.Length + 1;
+            if (length + needed > budget)
+            {
+                break;
+            }
+
+            length += needed;
+            count++;
+        }
+
+        return string.Join('\n', lines.Take(count)) + ellipsis;
     }
 
     public static MessageComponent BuildQueuePageControls(int page, bool hasNextPage)
