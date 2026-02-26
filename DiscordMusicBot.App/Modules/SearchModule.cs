@@ -63,7 +63,7 @@ public sealed class SearchModule(
         var urlProcessor = urlProcessorFactory.GetProcessor(url);
         var musicItemsResult = await urlProcessor.GetMusicItemsAsync(url);
 
-        if (!musicItemsResult.IsSuccess)
+        if (!musicItemsResult.IsSuccess || musicItemsResult.Value?.Items.Count == 0)
         {
             await ModifyOriginalResponseAsync(props =>
             {
@@ -87,6 +87,7 @@ public sealed class SearchModule(
 
         await ((IComponentInteraction)Context.Interaction).ModifyOriginalResponseAsync(props =>
         {
+            props.Content = null;
             props.Embed = embed;
             props.Components = disabledMenu;
         });
