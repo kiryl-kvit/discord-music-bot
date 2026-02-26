@@ -10,4 +10,5 @@ public interface IPlayQueueRepository
     Task ClearAsync(ulong guildId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PlayQueueItem>> GetPageAsync(ulong guildId, int skip, int take, CancellationToken cancellationToken = default);
     Task<int> GetCountAsync(ulong guildId, CancellationToken cancellationToken = default);
+    Task<long> GetTotalDurationMsAsync(ulong guildId, CancellationToken cancellationToken = default);
 }

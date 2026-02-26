@@ -28,8 +28,12 @@ public sealed class FavoriteModule(
 
         if (!SupportedSources.IsSupported(url))
         {
-            await ModifyOriginalResponseAsync(props => props.Content =
-                $"Unsupported source. {SupportedSources.GetSupportedSourcesMessage()}");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Unsupported Source",
+                    SupportedSources.GetSupportedSourcesMessage());
+            });
             return;
         }
 
@@ -37,21 +41,34 @@ public sealed class FavoriteModule(
 
         if (favoritesOptions.CurrentValue.IsLimitReached(count))
         {
-            await ModifyOriginalResponseAsync(props => props.Content =
-                $"You have reached the favorites limit ({favoritesOptions.CurrentValue.Limit}). Remove some favorites before adding new ones.");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Favorites Limit Reached",
+                    $"You have reached the favorites limit ({favoritesOptions.CurrentValue.Limit}).",
+                    "Remove some favorites before adding new ones.");
+            });
             return;
         }
 
         var normalizedUrl = UrlNormalizer.TryNormalize(url);
         if (normalizedUrl is null)
         {
-            await ModifyOriginalResponseAsync(props => props.Content = "Could not process this URL.");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Invalid URL", "Could not process this URL.");
+            });
             return;
         }
 
         if (await favoriteRepository.ExistsByUrlAsync(userId, normalizedUrl))
         {
-            await ModifyOriginalResponseAsync(props => props.Content = "This item is already in your favorites.");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Duplicate", "This item is already in your favorites.");
+            });
             return;
         }
 
@@ -60,8 +77,12 @@ public sealed class FavoriteModule(
 
         if (!musicItemsResult.IsSuccess)
         {
-            await ModifyOriginalResponseAsync(props => props.Content =
-                $"Failed to process URL: {musicItemsResult.ErrorMessage}");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Failed to Process URL",
+                    musicItemsResult.ErrorMessage ?? "An unknown error occurred.");
+            });
             return;
         }
 
@@ -74,7 +95,7 @@ public sealed class FavoriteModule(
 
         var favoriteItem = FavoriteItem.Create(
             userId, storedUrl, title, alias, representative.Author,
-            isPlaylist ? null : representative.Duration, isPlaylist);
+            isPlaylist ? null : representative.Duration, isPlaylist, representative.ThumbnailUrl);
 
         await favoriteRepository.AddAsync(favoriteItem);
 
@@ -115,14 +136,18 @@ public sealed class FavoriteModule(
 
         if (!long.TryParse(favoriteIdStr, out var favoriteId))
         {
-            await RespondAsync("Invalid favorite selection.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Invalid Selection", "The favorite selection is invalid."),
+                ephemeral: true);
             return;
         }
 
         var item = await favoriteRepository.GetByIdAsync(favoriteId);
         if (item is null || item.UserId != userId)
         {
-            await RespondAsync("Favorite not found.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Not Found", "Favorite not found."),
+                ephemeral: true);
             return;
         }
 
@@ -143,20 +168,26 @@ public sealed class FavoriteModule(
 
         if (!long.TryParse(favoriteIdStr, out var favoriteId))
         {
-            await RespondAsync("Invalid favorite selection.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Invalid Selection", "The favorite selection is invalid."),
+                ephemeral: true);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(newName))
         {
-            await RespondAsync("New name cannot be empty.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Invalid Name", "New name cannot be empty."),
+                ephemeral: true);
             return;
         }
 
         var item = await favoriteRepository.GetByIdAsync(favoriteId);
         if (item is null || item.UserId != userId)
         {
-            await RespondAsync("Favorite not found.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Not Found", "Favorite not found."),
+                ephemeral: true);
             return;
         }
 

@@ -11,6 +11,7 @@ internal sealed class PlayQueueItemRow
     public string Title { get; init; } = null!;
     public string? Author { get; init; }
     public long? DurationMs { get; init; }
+    public string? ThumbnailUrl { get; init; }
     public int Position { get; init; }
 
     public PlayQueueItem ToPlayQueueItem()
@@ -22,6 +23,7 @@ internal sealed class PlayQueueItemRow
             Url,
             Title,
             Author,
-            DurationMs.HasValue ? TimeSpan.FromMilliseconds(DurationMs.Value) : null);
+            DurationMs.HasValue ? TimeSpan.FromMilliseconds(DurationMs.Value) : null,
+            ThumbnailUrl);
     }
 }

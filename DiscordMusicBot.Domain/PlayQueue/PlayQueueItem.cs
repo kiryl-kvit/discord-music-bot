@@ -11,13 +11,14 @@ public sealed class PlayQueueItem
     public string Title { get; private set; } = null!;
     public string? Author { get; private set; }
     public TimeSpan? Duration { get; private set; }
+    public string? ThumbnailUrl { get; private set; }
 
     private PlayQueueItem()
     {
     }
 
     public static PlayQueueItem Create(ulong guildId, ulong userId, string url, string title, string? author,
-        TimeSpan? duration)
+        TimeSpan? duration, string? thumbnailUrl = null)
     {
         return new PlayQueueItem
         {
@@ -26,12 +27,13 @@ public sealed class PlayQueueItem
             Url = url.Trim(),
             Title = title,
             Author = author,
-            Duration = duration
+            Duration = duration,
+            ThumbnailUrl = thumbnailUrl
         };
     }
 
     public static PlayQueueItem Restore(long id, ulong guildId, ulong userId, string url, string title,
-        string? author, TimeSpan? duration)
+        string? author, TimeSpan? duration, string? thumbnailUrl = null)
     {
         return new PlayQueueItem
         {
@@ -41,7 +43,8 @@ public sealed class PlayQueueItem
             Url = url,
             Title = title,
             Author = author,
-            Duration = duration
+            Duration = duration,
+            ThumbnailUrl = thumbnailUrl
         };
     }
 

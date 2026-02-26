@@ -17,21 +17,30 @@ public sealed class HelpModule : InteractionModuleBase
         return new EmbedBuilder()
             .WithTitle("Music Bot Commands")
             .WithColor(Color.Purple)
-            .WithDescription("Here are all the available commands:")
-            .AddField("/help", "Show this help message.", inline: false)
-            .AddField("/join", "Join the voice channel you are currently in.", inline: false)
-            .AddField("/leave", "Leave the current voice channel.", inline: false)
-            .AddField("/queue add `<url>`", "Add a URL or a favorite to the queue. Start typing to see your favorites.", inline: false)
-            .AddField("/queue resume", "Resume queue playback.", inline: false)
-            .AddField("/queue pause", "Pause queue playback.", inline: false)
-            .AddField("/queue shuffle", "Shuffle the current queue.", inline: false)
-            .AddField("/queue skip `[count]`", "Skip one or more tracks. Defaults to 1.", inline: false)
-            .AddField("/queue list `[page]`", "Show the current queue with pagination.", inline: false)
-            .AddField("/queue clear", "Clear all items from the queue.", inline: false)
-            .AddField("/fav add `<url>` `[alias]`", "Save a track or playlist to your favorites.", inline: false)
-            .AddField("/fav list `[page]`", "Show your favorites with pagination.", inline: false)
-            .AddField("/fav remove `<favorite>`", "Remove a favorite by name (autocomplete).", inline: false)
-            .AddField("/fav rename `<favorite>` `<new_name>`", "Rename a favorite (autocomplete).", inline: false)
+            .WithDescription(
+                "**Getting Started**\n" +
+                "1. Join a voice channel\n" +
+                "2. Use `/join` to bring the bot in\n" +
+                "3. Use `/queue add <url>` to add a track\n" +
+                "Playback starts automatically when the bot is connected and tracks are queued.")
+            .AddField("Voice",
+                "`/join` — Join your current voice channel\n" +
+                "`/leave` — Leave the voice channel")
+            .AddField("Queue",
+                "`/queue add <url>` — Add a URL or favorite to the queue\n" +
+                "`/queue list [page]` — Show the current queue\n" +
+                "`/queue resume` — Resume playback\n" +
+                "`/queue pause` — Pause playback\n" +
+                "`/queue skip [count]` — Skip one or more tracks\n" +
+                "`/queue shuffle` — Shuffle the queue\n" +
+                "`/queue clear` — Clear all items from the queue")
+            .AddField("Favorites",
+                "`/fav add <url> [alias]` — Save a track or playlist\n" +
+                "`/fav list [page]` — Show your favorites\n" +
+                "`/fav remove <favorite>` — Remove a favorite\n" +
+                "`/fav rename <favorite> <new_name>` — Rename a favorite")
+            .AddField("Other",
+                "`/help` — Show this help message")
             .Build();
     }
 }

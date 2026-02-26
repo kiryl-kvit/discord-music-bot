@@ -12,6 +12,7 @@ public sealed class FavoriteItem
     public string? Author { get; private set; }
     public TimeSpan? Duration { get; private set; }
     public bool IsPlaylist { get; private set; }
+    public string? ThumbnailUrl { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
     public string DisplayName => Alias ?? Title;
@@ -26,7 +27,7 @@ public sealed class FavoriteItem
     }
 
     public static FavoriteItem Create(ulong userId, string url, string title, string? alias, string? author,
-        TimeSpan? duration, bool isPlaylist)
+        TimeSpan? duration, bool isPlaylist, string? thumbnailUrl = null)
     {
         return new FavoriteItem
         {
@@ -37,12 +38,13 @@ public sealed class FavoriteItem
             Author = author,
             Duration = duration,
             IsPlaylist = isPlaylist,
+            ThumbnailUrl = thumbnailUrl,
             CreatedAt = DateTime.UtcNow,
         };
     }
 
     public static FavoriteItem Restore(long id, ulong userId, string url, string title, string? alias,
-        string? author, TimeSpan? duration, bool isPlaylist, DateTime createdAt)
+        string? author, TimeSpan? duration, bool isPlaylist, DateTime createdAt, string? thumbnailUrl = null)
     {
         return new FavoriteItem
         {
@@ -54,6 +56,7 @@ public sealed class FavoriteItem
             Author = author,
             Duration = duration,
             IsPlaylist = isPlaylist,
+            ThumbnailUrl = thumbnailUrl,
             CreatedAt = createdAt,
         };
     }

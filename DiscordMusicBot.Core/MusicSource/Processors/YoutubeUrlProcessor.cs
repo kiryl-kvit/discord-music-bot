@@ -5,6 +5,7 @@ using DiscordMusicBot.Core.MusicSource.Youtube;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YoutubeExplode;
+using YoutubeExplode.Common;
 using YoutubeExplode.Playlists;
 using YoutubeExplode.Videos;
 
@@ -114,6 +115,19 @@ public sealed class YoutubeUrlProcessor(
     {
         var url = YoutubeHelpers.VideoUrl(video.Id);
         var author = video.Author?.ChannelTitle;
-        return new MusicSource(video.Title, url, author, video.Duration);
+        var thumbnailUrl = GetThumbnailUrl(video.Thumbnails);
+        return new MusicSource(video.Title, url, author, video.Duration, thumbnailUrl);
+    }
+
+    private static string? GetThumbnailUrl(IReadOnlyList<Thumbnail> thumbnails)
+    {
+        if (thumbnails.Count == 0)
+        {
+            return null;
+        }
+
+        return thumbnails
+            .OrderBy(t => t.Resolution.Area)
+            .FirstOrDefault(t => t.Resolution.Width >= 120)?.Url ?? thumbnails[0].Url;
     }
 }

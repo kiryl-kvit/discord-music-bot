@@ -17,10 +17,11 @@ public sealed class QueuePaginationModule(QueuePlaybackService queuePlaybackServ
 
         var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize + 1);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var stats = await queuePlaybackService.GetQueueStatsAsync(guildId);
         var hasNextPage = items.Count > pageSize;
         var pageItems = hasNextPage ? items.Take(pageSize).ToList() : items;
 
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize, stats);
         var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage);
 
         await ((Discord.IComponentInteraction)Context.Interaction).UpdateAsync(msg =>

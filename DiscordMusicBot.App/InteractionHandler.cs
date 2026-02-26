@@ -1,6 +1,7 @@
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
+using DiscordMusicBot.App.Services;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App;
@@ -57,7 +58,10 @@ public class InteractionHandler(
 
             if (interaction.Type == InteractionType.ApplicationCommand)
             {
-                await interaction.RespondAsync("An error occurred while executing the command.", ephemeral: true);
+                await interaction.RespondAsync(
+                    embed: ErrorEmbedBuilder.Build("Command Error",
+                        "An error occurred while executing the command."),
+                    ephemeral: true);
             }
         }
     }

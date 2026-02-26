@@ -7,8 +7,6 @@ namespace DiscordMusicBot.App.Services;
 public static class FavoriteEmbedBuilder
 {
     public const int PageSize = 10;
-    private const string UnknownAuthor = "Unknown";
-    private const string UnknownDuration = "??:??";
 
     public static Embed BuildAddedEmbed(FavoriteItem item)
     {
@@ -23,9 +21,9 @@ public static class FavoriteEmbedBuilder
         }
         else
         {
-            builder.AddField("Artist", item.Author ?? UnknownAuthor, inline: true);
+            builder.AddField("Artist", item.Author ?? DisplayConstants.UnknownAuthor, inline: true);
             builder.AddField("Duration",
-                item.Duration is not null ? DateFormatter.FormatTime(item.Duration.Value) : UnknownDuration,
+                item.Duration is not null ? DateFormatter.FormatTime(item.Duration.Value) : DisplayConstants.UnknownDuration,
                 inline: true);
         }
 
@@ -65,8 +63,8 @@ public static class FavoriteEmbedBuilder
 
         var duration = item.Duration is not null
             ? DateFormatter.FormatTime(item.Duration.Value)
-            : UnknownDuration;
-        return $"`{position}.` **{item.DisplayName}** - {item.Author ?? UnknownAuthor} `[{duration}]`";
+            : DisplayConstants.UnknownDuration;
+        return $"`{position}.` **{item.DisplayName}** - {item.Author ?? DisplayConstants.UnknownAuthor} `[{duration}]`";
     }
 
     public static Embed BuildRemovedEmbed(FavoriteItem item)

@@ -1,4 +1,5 @@
 using Discord;
+using DiscordMusicBot.App.Services.Models;
 using DiscordMusicBot.Core.Formatters;
 using DiscordMusicBot.Domain.PlayQueue;
 
@@ -7,11 +8,9 @@ namespace DiscordMusicBot.App.Services;
 public static class QueueEmbedBuilder
 {
     public const int PageSize = 10;
-    private const string UnknownAuthor = "Unknown";
-    private const string UnknownDuration = "??:??";
 
     public static Embed BuildQueueEmbed(IReadOnlyCollection<PlayQueueItem> items, PlayQueueItem? currentItem,
-        int page, int pageSize)
+        int page, int pageSize, QueueStats stats)
     {
         var builder = new EmbedBuilder()
             .WithTitle("Queue")
@@ -24,7 +23,7 @@ public static class QueueEmbedBuilder
 
         if (items.Count == 0)
         {
-            builder.AddField("Up Next", "Queue is empty.");
+            builder.AddField("Up Next", "Queue is empty. Use `/queue add <url>` to add tracks.");
         }
         else
         {
@@ -32,12 +31,16 @@ public static class QueueEmbedBuilder
             builder.AddField("Up Next", string.Join('\n', lines));
         }
 
+        var totalPages = stats.Count == 0 ? 1 : (int)Math.Ceiling((double)stats.Count / pageSize);
+        var durationText = DateFormatter.FormatTime(stats.TotalDuration);
+        builder.WithFooter($"Page {page}/{totalPages}  |  {stats.Count} tracks  |  {durationText} total");
+
         return builder.Build();
     }
 
     private static string FormatNowPlaying(PlayQueueItem item)
     {
-        return $"{item.Title} - {item.Author ?? UnknownAuthor} (requested by {DiscordFormatter.MentionUser(item.UserId)})";
+        return $"{item.Title} - {item.Author ?? DisplayConstants.UnknownAuthor} (requested by {DiscordFormatter.MentionUser(item.UserId)})";
     }
 
     private static string FormatQueueLine(PlayQueueItem item, int page, int pageSize, int index)
@@ -45,8 +48,8 @@ public static class QueueEmbedBuilder
         var position = (page - 1) * pageSize + index + 1;
         var duration = item.Duration is not null
             ? DateFormatter.FormatTime(item.Duration.Value)
-            : UnknownDuration;
-        return $"`{position}.` **{item.Title}** - {item.Author ?? UnknownAuthor} `[{duration}]` - added by {DiscordFormatter.MentionUser(item.UserId)}";
+            : DisplayConstants.UnknownDuration;
+        return $"`{position}.` **{item.Title}** - {item.Author ?? DisplayConstants.UnknownAuthor} `[{duration}]` - added by {DiscordFormatter.MentionUser(item.UserId)}";
     }
 
     public static MessageComponent BuildQueuePageControls(int page, bool hasNextPage)
@@ -69,11 +72,11 @@ public static class QueueEmbedBuilder
             var item = items[0];
             var duration = item.Duration is not null
                 ? DateFormatter.FormatTime(item.Duration.Value)
-                : UnknownDuration;
+                : DisplayConstants.UnknownDuration;
 
             builder.WithTitle("Added to Queue");
             builder.WithDescription($"**{item.Title}**\nRequested by {DiscordFormatter.MentionUser(item.UserId)}");
-            builder.AddField("Artist", item.Author ?? UnknownAuthor, inline: true);
+            builder.AddField("Artist", item.Author ?? DisplayConstants.UnknownAuthor, inline: true);
             builder.AddField("Duration", duration, inline: true);
         }
         else
@@ -87,7 +90,7 @@ public static class QueueEmbedBuilder
 
             var formattedTotal = totalDuration > 0
                 ? DateFormatter.FormatTime(TimeSpan.FromSeconds(totalDuration))
-                : UnknownDuration;
+                : DisplayConstants.UnknownDuration;
 
             builder.AddField("Total Tracks", items.Length, inline: true);
             builder.AddField("Total Duration", formattedTotal, inline: true);
@@ -96,8 +99,8 @@ public static class QueueEmbedBuilder
             {
                 var duration = item.Duration is not null
                     ? DateFormatter.FormatTime(item.Duration.Value)
-                    : UnknownDuration;
-                return $"**{item.Title}** - {item.Author ?? UnknownAuthor} `[{duration}]`";
+                    : DisplayConstants.UnknownDuration;
+                return $"**{item.Title}** - {item.Author ?? DisplayConstants.UnknownAuthor} `[{duration}]`";
             });
 
             var preview = string.Join('\n', previewItems);
@@ -124,13 +127,13 @@ public static class QueueEmbedBuilder
             if (skippedItem is not null)
             {
                 builder.WithDescription(
-                    $"Starting from: **{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor} (requested by {DiscordFormatter.MentionUser(skippedItem.UserId)})");
+                    $"Starting from: **{skippedItem.Title}** - {skippedItem.Author ?? DisplayConstants.UnknownAuthor} (requested by {DiscordFormatter.MentionUser(skippedItem.UserId)})");
             }
         }
         else if (skippedItem is not null)
         {
             builder.WithTitle("Skipped")
-                .WithDescription($"**{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor} (requested by {DiscordFormatter.MentionUser(skippedItem.UserId)})");
+                .WithDescription($"**{skippedItem.Title}** - {skippedItem.Author ?? DisplayConstants.UnknownAuthor} (requested by {DiscordFormatter.MentionUser(skippedItem.UserId)})");
         }
         else
         {
@@ -141,14 +144,14 @@ public static class QueueEmbedBuilder
         {
             var duration = nextItem.Duration is not null
                 ? DateFormatter.FormatTime(nextItem.Duration.Value)
-                : UnknownDuration;
+                : DisplayConstants.UnknownDuration;
 
             builder.AddField("Up Next",
-                $"**{nextItem.Title}** - {nextItem.Author ?? UnknownAuthor} `[{duration}]` - added by {DiscordFormatter.MentionUser(nextItem.UserId)}");
+                $"**{nextItem.Title}** - {nextItem.Author ?? DisplayConstants.UnknownAuthor} `[{duration}]` - added by {DiscordFormatter.MentionUser(nextItem.UserId)}");
         }
         else
         {
-            builder.AddField("Up Next", "Queue is empty");
+            builder.AddField("Up Next", "Queue is empty. Use `/queue add <url>` to add tracks.");
         }
 
         return builder.Build();

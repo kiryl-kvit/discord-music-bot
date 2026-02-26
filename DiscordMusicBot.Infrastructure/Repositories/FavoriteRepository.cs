@@ -14,8 +14,8 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
         var id = await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(
                 """
-                INSERT INTO favorite_items (user_id, url, title, alias, author, duration_ms, is_playlist)
-                VALUES (@UserId, @Url, @Title, @Alias, @Author, @DurationMs, @IsPlaylist)
+                INSERT INTO favorite_items (user_id, url, title, alias, author, duration_ms, is_playlist, thumbnail_url)
+                VALUES (@UserId, @Url, @Title, @Alias, @Author, @DurationMs, @IsPlaylist, @ThumbnailUrl)
                 RETURNING id
                 """,
                 new
@@ -27,6 +27,7 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
                     item.Author,
                     DurationMs = item.Duration.HasValue ? (long?)item.Duration.Value.TotalMilliseconds : null,
                     IsPlaylist = item.IsPlaylist ? 1 : 0,
+                    item.ThumbnailUrl,
                 },
                 cancellationToken: cancellationToken));
 
@@ -66,7 +67,7 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
         var row = await connection.QueryFirstOrDefaultAsync<FavoriteItemRow>(
             new CommandDefinition(
                 """
-                SELECT id, user_id, url, title, alias, author, duration_ms, is_playlist, created_at
+                SELECT id, user_id, url, title, alias, author, duration_ms, is_playlist, thumbnail_url, created_at
                 FROM favorite_items
                 WHERE id = @Id
                 """,
@@ -84,7 +85,7 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
         var rows = await connection.QueryAsync<FavoriteItemRow>(
             new CommandDefinition(
                 """
-                SELECT id, user_id, url, title, alias, author, duration_ms, is_playlist, created_at
+                SELECT id, user_id, url, title, alias, author, duration_ms, is_playlist, thumbnail_url, created_at
                 FROM favorite_items
                 WHERE user_id = @UserId
                 ORDER BY created_at DESC
@@ -115,7 +116,7 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
         var rows = await connection.QueryAsync<FavoriteItemRow>(
             new CommandDefinition(
                 """
-                SELECT id, user_id, url, title, alias, author, duration_ms, is_playlist, created_at
+                SELECT id, user_id, url, title, alias, author, duration_ms, is_playlist, thumbnail_url, created_at
                 FROM favorite_items
                 WHERE user_id = @UserId
                   AND (title LIKE @Query ESCAPE '\' OR alias LIKE @Query ESCAPE '\' OR author LIKE @Query ESCAPE '\')

@@ -13,6 +13,7 @@ internal sealed class FavoriteItemRow
     public string? Author { get; init; }
     public long? DurationMs { get; init; }
     public int IsPlaylist { get; init; }
+    public string? ThumbnailUrl { get; init; }
     public string CreatedAt { get; init; } = null!;
 
     public FavoriteItem ToFavoriteItem()
@@ -26,6 +27,7 @@ internal sealed class FavoriteItemRow
             Author,
             DurationMs.HasValue ? TimeSpan.FromMilliseconds(DurationMs.Value) : null,
             IsPlaylist != 0,
-            DateTime.Parse(CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal));
+            DateTime.Parse(CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal),
+            ThumbnailUrl);
     }
 }

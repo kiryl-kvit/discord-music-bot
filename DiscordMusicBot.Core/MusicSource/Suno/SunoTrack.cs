@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace DiscordMusicBot.Core.MusicSource.Suno;
 
-public sealed partial record SunoTrack(string Title, string? Artist, string SongId)
+public sealed partial record SunoTrack(string Title, string? Artist, string SongId, string? ImageUrl = null)
 {
     private const string BaseUrl = "https://suno.com";
     private const string CdnBaseUrl = "https://cdn1.suno.ai";
