@@ -1,6 +1,7 @@
 # Discord Music Bot
 
 A Discord music bot built with .NET 10 and [Discord.Net](https://github.com/discord-net/Discord.Net).
+This app is NOT designed for high-demand multi-guild deployment. It is a simple application for a single-server deployment for a group of friends.
 
 ## Features
 
