@@ -1,6 +1,7 @@
 using Dapper;
 using DiscordMusicBot.Domain.Playback;
 using DiscordMusicBot.Infrastructure.Database;
+using DiscordMusicBot.Infrastructure.Dto;
 
 namespace DiscordMusicBot.Infrastructure.Repositories;
 

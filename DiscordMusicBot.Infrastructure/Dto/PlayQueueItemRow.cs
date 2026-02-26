@@ -1,6 +1,6 @@
 using DiscordMusicBot.Domain.PlayQueue;
 
-namespace DiscordMusicBot.Infrastructure.Repositories;
+namespace DiscordMusicBot.Infrastructure.Dto;
 
 internal sealed class PlayQueueItemRow
 {
