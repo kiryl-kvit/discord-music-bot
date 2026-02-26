@@ -50,7 +50,7 @@ public sealed class QueueModule(
             return;
         }
 
-        var queueItems = musicItemsResult.Value!
+        var queueItems = musicItemsResult.Value!.Items
             .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
 
         await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
@@ -104,7 +104,7 @@ public sealed class QueueModule(
                 return;
             }
 
-            queueItems = musicItemsResult.Value!
+            queueItems = musicItemsResult.Value!.Items
                 .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
         }
         else
@@ -228,11 +228,13 @@ public sealed class QueueModule(
         var pageIndex = page - 1;
         var skip = pageIndex * pageSize;
 
-        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize);
+        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize + 1);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var hasNextPage = items.Count > pageSize;
+        var pageItems = hasNextPage ? items.Take(pageSize).ToList() : items;
 
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(items, currentItem, page, pageSize);
-        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage: items.Count == pageSize);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize);
+        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage);
 
         await RespondAsync(embed: embed, components: components);
     }

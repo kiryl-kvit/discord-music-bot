@@ -23,18 +23,18 @@ public sealed partial class SpotifyUrlProcessor(
     [GeneratedRegex(@"open\.spotify\.com/(?<type>track|playlist|album)/(?<id>[a-zA-Z0-9]+)", RegexOptions.IgnoreCase)]
     private static partial Regex SpotifyUrlPattern();
 
-    public async Task<Result<IReadOnlyCollection<MusicSource>>> GetMusicItemsAsync(string url,
+    public async Task<Result<MusicSourceResult>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default)
     {
         if (!SupportedSources.TryGetSourceKey(url, out var key) ||
             !string.Equals(key, SupportedSources.SpotifyKey, StringComparison.OrdinalIgnoreCase))
         {
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unsupported Spotify URL.");
+            return Result<MusicSourceResult>.Failure("Unsupported Spotify URL.");
         }
 
         if (!TryParseSpotifyUrl(url, out var resourceType, out var resourceId))
         {
-            return Result<IReadOnlyCollection<MusicSource>>.Failure(
+            return Result<MusicSourceResult>.Failure(
                 "Invalid Spotify URL. Expected a track, playlist, or album link.");
         }
 
@@ -43,11 +43,11 @@ public sealed partial class SpotifyUrlProcessor(
             SpotifyResourceType.Track => await ProcessTrackAsync(resourceId, cancellationToken),
             SpotifyResourceType.Playlist => await ProcessPlaylistAsync(resourceId, cancellationToken),
             SpotifyResourceType.Album => await ProcessAlbumAsync(resourceId, cancellationToken),
-            _ => Result<IReadOnlyCollection<MusicSource>>.Failure("Unsupported Spotify resource type."),
+            _ => Result<MusicSourceResult>.Failure("Unsupported Spotify resource type."),
         };
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> ProcessTrackAsync(string trackId,
+    private async Task<Result<MusicSourceResult>> ProcessTrackAsync(string trackId,
         CancellationToken cancellationToken)
     {
         try
@@ -59,20 +59,20 @@ public sealed partial class SpotifyUrlProcessor(
 
             if (resolved is null)
             {
-                return Result<IReadOnlyCollection<MusicSource>>.Failure(
+                return Result<MusicSourceResult>.Failure(
                     $"Could not find a YouTube match for \"{spotifyTrack.Title}\" by {spotifyTrack.Artist}.");
             }
 
-            return Result<IReadOnlyCollection<MusicSource>>.Success([resolved]);
+            return Result<MusicSourceResult>.Success(new MusicSourceResult([resolved]));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to resolve Spotify track {TrackId}.", trackId);
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch Spotify track metadata.");
+            return Result<MusicSourceResult>.Failure("Unable to fetch Spotify track metadata.");
         }
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> ProcessPlaylistAsync(string playlistId,
+    private async Task<Result<MusicSourceResult>> ProcessPlaylistAsync(string playlistId,
         CancellationToken cancellationToken)
     {
         try
@@ -84,7 +84,7 @@ public sealed partial class SpotifyUrlProcessor(
 
             if (playlist.Items is null)
             {
-                return Result<IReadOnlyCollection<MusicSource>>.Failure("Spotify playlist is empty or inaccessible.");
+                return Result<MusicSourceResult>.Failure("Spotify playlist is empty or inaccessible.");
             }
 
             await foreach (var item in client.Paginate(playlist.Items, cancel: cancellationToken))
@@ -100,16 +100,16 @@ public sealed partial class SpotifyUrlProcessor(
                 }
             }
 
-            return await ResolveTracksToYoutubeAsync(spotifyTracks, cancellationToken);
+            return await ResolveTracksToYoutubeAsync(spotifyTracks, playlist.Name, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to resolve Spotify playlist {PlaylistId}.", playlistId);
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch Spotify playlist metadata.");
+            return Result<MusicSourceResult>.Failure("Unable to fetch Spotify playlist metadata.");
         }
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> ProcessAlbumAsync(string albumId,
+    private async Task<Result<MusicSourceResult>> ProcessAlbumAsync(string albumId,
         CancellationToken cancellationToken)
     {
         try
@@ -130,17 +130,17 @@ public sealed partial class SpotifyUrlProcessor(
                 spotifyTracks.Add(SpotifyTrack.FromSimpleTrack(track));
             }
 
-            return await ResolveTracksToYoutubeAsync(spotifyTracks, cancellationToken);
+            return await ResolveTracksToYoutubeAsync(spotifyTracks, album.Name, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to resolve Spotify album {AlbumId}.", albumId);
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch Spotify album metadata.");
+            return Result<MusicSourceResult>.Failure("Unable to fetch Spotify album metadata.");
         }
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> ResolveTracksToYoutubeAsync(
-        List<SpotifyTrack> spotifyTracks, CancellationToken cancellationToken)
+    private async Task<Result<MusicSourceResult>> ResolveTracksToYoutubeAsync(
+        List<SpotifyTrack> spotifyTracks, string? collectionName, CancellationToken cancellationToken)
     {
         var results = new MusicSource?[spotifyTracks.Count];
 
@@ -166,11 +166,11 @@ public sealed partial class SpotifyUrlProcessor(
 
         if (resolved.Count == 0)
         {
-            return Result<IReadOnlyCollection<MusicSource>>.Failure(
+            return Result<MusicSourceResult>.Failure(
                 "Could not find YouTube matches for any of the Spotify tracks.");
         }
 
-        return Result<IReadOnlyCollection<MusicSource>>.Success(resolved);
+        return Result<MusicSourceResult>.Success(new MusicSourceResult(resolved, collectionName));
     }
 
     private async Task<MusicSource?> ResolveToYoutubeAsync(SpotifyTrack spotifyTrack,

@@ -118,16 +118,21 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
                 SELECT id, user_id, url, title, alias, author, duration_ms, is_playlist, created_at
                 FROM favorite_items
                 WHERE user_id = @UserId
-                  AND (title LIKE @Query OR alias LIKE @Query OR author LIKE @Query)
+                  AND (title LIKE @Query ESCAPE '\' OR alias LIKE @Query ESCAPE '\' OR author LIKE @Query ESCAPE '\')
                 ORDER BY
-                  CASE WHEN alias LIKE @Query THEN 0
-                       WHEN title LIKE @Query THEN 1
+                  CASE WHEN alias LIKE @Query ESCAPE '\' THEN 0
+                       WHEN title LIKE @Query ESCAPE '\' THEN 1
                        ELSE 2
                   END,
                   created_at DESC
                 LIMIT @Limit
                 """,
-                new { UserId = userId.ToString(), Query = $"%{query}%", Limit = limit },
+                new
+                {
+                    UserId = userId.ToString(),
+                    Query = $"%{EscapeLikePattern(query)}%",
+                    Limit = limit
+                },
                 cancellationToken: cancellationToken));
 
         return rows.Select(r => r.ToFavoriteItem()).ToArray();
@@ -145,5 +150,13 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
                 cancellationToken: cancellationToken));
 
         return affected > 0;
+    }
+
+    private static string EscapeLikePattern(string input)
+    {
+        return input
+            .Replace(@"\", @"\\")
+            .Replace("%", @"\%")
+            .Replace("_", @"\_");
     }
 }

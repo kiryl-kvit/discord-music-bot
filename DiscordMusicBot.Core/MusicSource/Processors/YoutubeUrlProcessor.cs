@@ -17,13 +17,13 @@ public sealed class YoutubeUrlProcessor(
     : IUrlProcessor
 {
 
-    public async Task<Result<IReadOnlyCollection<MusicSource>>> GetMusicItemsAsync(string url,
+    public async Task<Result<MusicSourceResult>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default)
     {
         if (!SupportedSources.TryGetSourceKey(url, out var key) ||
             !string.Equals(key, SupportedSources.YoutubeKey, StringComparison.OrdinalIgnoreCase))
         {
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unsupported YouTube URL.");
+            return Result<MusicSourceResult>.Failure("Unsupported YouTube URL.");
         }
 
         var playlistId = PlaylistId.TryParse(url);
@@ -35,34 +35,38 @@ public sealed class YoutubeUrlProcessor(
         var videoId = VideoId.TryParse(url);
         if (videoId is null)
         {
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Invalid YouTube URL.");
+            return Result<MusicSourceResult>.Failure("Invalid YouTube URL.");
         }
 
         return await GetVideoItemAsync(videoId.Value, cancellationToken);
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> GetVideoItemAsync(VideoId videoId,
+    private async Task<Result<MusicSourceResult>> GetVideoItemAsync(VideoId videoId,
         CancellationToken cancellationToken)
     {
         try
         {
             var video = await youtubeClient.Videos.GetAsync(videoId, cancellationToken);
             var source = ToMusicSource(video);
-            return Result<IReadOnlyCollection<MusicSource>>.Success([source]);
+            return Result<MusicSourceResult>.Success(new MusicSourceResult([source]));
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to resolve YouTube video {VideoId}.", videoId);
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch YouTube video metadata.");
+            return Result<MusicSourceResult>.Failure("Unable to fetch YouTube video metadata.");
         }
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> GetPlaylistItemsAsync(PlaylistId playlistId,
+    private async Task<Result<MusicSourceResult>> GetPlaylistItemsAsync(PlaylistId playlistId,
         CancellationToken cancellationToken)
     {
         var sources = new List<MusicSource>();
+        string? playlistName = null;
         try
         {
+            var playlist = await youtubeClient.Playlists.GetAsync(playlistId, cancellationToken);
+            playlistName = playlist.Title;
+
             await foreach (var video in youtubeClient.Playlists.GetVideosAsync(playlistId, cancellationToken))
             {
                 if (options.CurrentValue.IsPlaylistLimitReached(sources.Count))
@@ -82,13 +86,13 @@ public sealed class YoutubeUrlProcessor(
 
             if (sources.Count == 0)
             {
-                return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch YouTube playlist metadata.");
+                return Result<MusicSourceResult>.Failure("Unable to fetch YouTube playlist metadata.");
             }
 
             logger.LogInformation("Partial playlist fetch: retrieved {Count} items before failure", sources.Count);
         }
 
-        return Result<IReadOnlyCollection<MusicSource>>.Success(sources);
+        return Result<MusicSourceResult>.Success(new MusicSourceResult(sources, playlistName));
     }
 
     private bool TryConvertToMusicSource(IVideo video, out MusicSource source)

@@ -14,18 +14,18 @@ public sealed partial class SunoUrlProcessor(
     [GeneratedRegex(@"suno\.com/(?<type>song|playlist)/(?<id>[0-9a-fA-F-]+)", RegexOptions.IgnoreCase)]
     private static partial Regex SunoUrlPattern();
 
-    public async Task<Result<IReadOnlyCollection<MusicSource>>> GetMusicItemsAsync(string url,
+    public async Task<Result<MusicSourceResult>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default)
     {
         if (!SupportedSources.TryGetSourceKey(url, out var key) ||
             !string.Equals(key, SupportedSources.SunoKey, StringComparison.OrdinalIgnoreCase))
         {
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unsupported Suno URL.");
+            return Result<MusicSourceResult>.Failure("Unsupported Suno URL.");
         }
 
         if (!TryParseSunoUrl(url, out var resourceType, out var resourceId))
         {
-            return Result<IReadOnlyCollection<MusicSource>>.Failure(
+            return Result<MusicSourceResult>.Failure(
                 "Invalid Suno URL. Expected a song or playlist link.");
         }
 
@@ -33,11 +33,11 @@ public sealed partial class SunoUrlProcessor(
         {
             SunoResourceType.Song => await ProcessSongAsync(resourceId, cancellationToken),
             SunoResourceType.Playlist => await ProcessPlaylistAsync(resourceId, cancellationToken),
-            _ => Result<IReadOnlyCollection<MusicSource>>.Failure("Unsupported Suno resource type."),
+            _ => Result<MusicSourceResult>.Failure("Unsupported Suno resource type."),
         };
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> ProcessSongAsync(string songId,
+    private async Task<Result<MusicSourceResult>> ProcessSongAsync(string songId,
         CancellationToken cancellationToken)
     {
         try
@@ -46,30 +46,30 @@ public sealed partial class SunoUrlProcessor(
 
             if (track is null)
             {
-                return Result<IReadOnlyCollection<MusicSource>>.Failure(
+                return Result<MusicSourceResult>.Failure(
                     $"Could not fetch metadata for Suno song '{songId}'.");
             }
 
             var musicSource = ToMusicSource(track);
-            return Result<IReadOnlyCollection<MusicSource>>.Success([musicSource]);
+            return Result<MusicSourceResult>.Success(new MusicSourceResult([musicSource]));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to process Suno song {SongId}.", songId);
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch Suno song metadata.");
+            return Result<MusicSourceResult>.Failure("Unable to fetch Suno song metadata.");
         }
     }
 
-    private async Task<Result<IReadOnlyCollection<MusicSource>>> ProcessPlaylistAsync(string playlistId,
+    private async Task<Result<MusicSourceResult>> ProcessPlaylistAsync(string playlistId,
         CancellationToken cancellationToken)
     {
         try
         {
-            var tracks = await metadataClient.GetPlaylistTracksAsync(playlistId, cancellationToken);
+            var (playlistName, tracks) = await metadataClient.GetPlaylistAsync(playlistId, cancellationToken);
 
             if (tracks.Count == 0)
             {
-                return Result<IReadOnlyCollection<MusicSource>>.Failure(
+                return Result<MusicSourceResult>.Failure(
                     "Suno playlist is empty or inaccessible.");
             }
 
@@ -78,12 +78,12 @@ public sealed partial class SunoUrlProcessor(
             logger.LogInformation("Resolved {Count} tracks from Suno playlist {PlaylistId}.",
                 musicSources.Count, playlistId);
 
-            return Result<IReadOnlyCollection<MusicSource>>.Success(musicSources);
+            return Result<MusicSourceResult>.Success(new MusicSourceResult(musicSources, playlistName));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to process Suno playlist {PlaylistId}.", playlistId);
-            return Result<IReadOnlyCollection<MusicSource>>.Failure("Unable to fetch Suno playlist metadata.");
+            return Result<MusicSourceResult>.Failure("Unable to fetch Suno playlist metadata.");
         }
     }
 

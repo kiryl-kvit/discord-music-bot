@@ -1,3 +1,4 @@
+using System.Globalization;
 using DiscordMusicBot.Domain.Favorites;
 
 namespace DiscordMusicBot.Infrastructure.Dto;
@@ -25,6 +26,6 @@ internal sealed class FavoriteItemRow
             Author,
             DurationMs.HasValue ? TimeSpan.FromMilliseconds(DurationMs.Value) : null,
             IsPlaylist != 0,
-            DateTime.Parse(CreatedAt));
+            DateTime.Parse(CreatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal));
     }
 }

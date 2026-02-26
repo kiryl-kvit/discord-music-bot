@@ -65,19 +65,21 @@ public sealed class FavoriteModule(
             return;
         }
 
-        var musicItems = musicItemsResult.Value!;
+        var musicResult = musicItemsResult.Value!;
+        var musicItems = musicResult.Items;
         var isPlaylist = musicItems.Count > 1;
         var representative = musicItems.First();
         var storedUrl = isPlaylist ? normalizedUrl : representative.Url;
+        var title = isPlaylist ? (musicResult.PlaylistName ?? representative.Title) : representative.Title;
 
         var favoriteItem = FavoriteItem.Create(
-            userId, storedUrl, representative.Title, alias, representative.Author,
+            userId, storedUrl, title, alias, representative.Author,
             isPlaylist ? null : representative.Duration, isPlaylist);
 
         await favoriteRepository.AddAsync(favoriteItem);
 
         logger.LogInformation("User {UserId} added favorite: {Title} (playlist={IsPlaylist})",
-            userId, representative.Title, isPlaylist);
+            userId, title, isPlaylist);
 
         var embed = FavoriteEmbedBuilder.BuildAddedEmbed(favoriteItem);
         await ModifyOriginalResponseAsync(props =>
@@ -100,7 +102,7 @@ public sealed class FavoriteModule(
         var totalCount = await favoriteRepository.GetCountAsync(userId);
 
         var embed = FavoriteEmbedBuilder.BuildListEmbed(items, page, pageSize, totalCount);
-        var components = FavoriteEmbedBuilder.BuildPageControls(page, hasNextPage: items.Count == pageSize);
+        var components = FavoriteEmbedBuilder.BuildPageControls(page, hasNextPage: skip + items.Count < totalCount);
 
         await RespondAsync(embed: embed, components: components, ephemeral: true);
     }

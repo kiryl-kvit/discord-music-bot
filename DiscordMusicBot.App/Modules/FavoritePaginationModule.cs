@@ -19,7 +19,7 @@ public sealed class FavoritePaginationModule(IFavoriteRepository favoriteReposit
         var totalCount = await favoriteRepository.GetCountAsync(userId);
 
         var embed = FavoriteEmbedBuilder.BuildListEmbed(items, page, pageSize, totalCount);
-        var components = FavoriteEmbedBuilder.BuildPageControls(page, hasNextPage: items.Count == pageSize);
+        var components = FavoriteEmbedBuilder.BuildPageControls(page, hasNextPage: skip + items.Count < totalCount);
 
         await ((Discord.IComponentInteraction)Context.Interaction).UpdateAsync(msg =>
         {
