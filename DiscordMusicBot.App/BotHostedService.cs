@@ -22,7 +22,7 @@ public sealed class BotHostedService(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        migrator.Migrate();
+        await Task.Run(() => migrator.Migrate(), cancellationToken);
 
         discordClient.UserVoiceStateUpdated += voiceConnectionService.HandleVoiceStateUpdated;
 

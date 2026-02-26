@@ -38,7 +38,11 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
 
         for (var i = 0; i < items.Count; i++)
         {
-            if (i > 0) sb.Append(", ");
+            if (i > 0)
+            {
+                sb.Append(", ");
+            }
+
             sb.Append($"(@GuildId, @UserId{i}, @Url{i}, @Title{i}, @Author{i}, @DurationMs{i}, @Position{i})");
 
             var item = items[i];
@@ -50,20 +54,11 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             parameters.Add($"Position{i}", nextPosition + i);
         }
 
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                sb.ToString(), parameters, transaction: transaction, cancellationToken: cancellationToken));
+        sb.Append(" RETURNING id");
 
         var ids = (await connection.QueryAsync<long>(
             new CommandDefinition(
-                """
-                SELECT id FROM play_queue_items
-                WHERE guild_id = @GuildId AND position >= @StartPosition
-                ORDER BY position
-                """,
-                new { GuildId = guildIdStr, StartPosition = nextPosition },
-                transaction: transaction,
-                cancellationToken: cancellationToken))).AsList();
+                sb.ToString(), parameters, transaction: transaction, cancellationToken: cancellationToken))).AsList();
 
         for (var i = 0; i < items.Count; i++)
         {
@@ -110,7 +105,6 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
     {
         await using var connection = connectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         var ids = (await connection.QueryAsync<long>(
             new CommandDefinition(
@@ -120,7 +114,6 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 ORDER BY position
                 """,
                 new { GuildId = guildId.ToString(), ExcludeId = excludeItemId },
-                transaction: transaction,
                 cancellationToken: cancellationToken))).ToList();
 
         if (ids.Count <= 1)
@@ -128,7 +121,6 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             return;
         }
 
-        // Fisher-Yates shuffle
         for (var i = ids.Count - 1; i > 0; i--)
         {
             var j = Random.Shared.Next(0, i + 1);
@@ -153,11 +145,17 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         sb.Append("END WHERE guild_id = @GuildId AND id IN (");
         for (var i = 0; i < ids.Count; i++)
         {
-            if (i > 0) sb.Append(", ");
+            if (i > 0)
+            {
+                sb.Append(", ");
+            }
+
             sb.Append($"@Id{i}");
         }
 
         sb.Append(')');
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         await connection.ExecuteAsync(
             new CommandDefinition(

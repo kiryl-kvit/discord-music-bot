@@ -38,7 +38,18 @@ public sealed partial class QueuePlaybackService(
     public async Task<IReadOnlyCollection<PlayQueueItem>> GetQueueItemsAsync(ulong guildId, int skip = 0,
         int take = 10, CancellationToken cancellationToken = default)
     {
-        var offset = GetState(guildId).CurrentItem is not null ? 1 : 0;
+        var state = GetState(guildId);
+        var offset = 0;
+
+        if (state.CurrentItem is { } currentItem)
+        {
+            var headItem = await queueRepository.PeekNextAsync(guildId, cancellationToken: cancellationToken);
+            if (headItem?.Id == currentItem.Id)
+            {
+                offset = 1;
+            }
+        }
+
         return await queueRepository.GetPageAsync(guildId, skip + offset, take, cancellationToken);
     }
 
@@ -190,9 +201,7 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Skipping current track in guild {GuildId}", guildId);
 
         var currentItem = state.CurrentItem;
-        var nextItem = state.PrefetchedTrack is not null
-            ? await queueRepository.PeekNextAsync(guildId, skip: 1, cancellationToken: cancellationToken)
-            : null;
+        var nextItem = await queueRepository.PeekNextAsync(guildId, skip: 1, cancellationToken: cancellationToken);
         state.ResetResumeState();
         state.TriggerSkip();
 
