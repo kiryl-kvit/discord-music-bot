@@ -19,6 +19,9 @@ public sealed partial class SunoMetadataClient(
     [GeneratedRegex(@"<meta\s+(?:property|name)=""og:audio""\s+content=""([^""]+)""", RegexOptions.IgnoreCase)]
     private static partial Regex OgAudioPattern();
 
+    [GeneratedRegex(@"<meta\s+(?:property|name)=""og:image""\s+content=""([^""]+)""", RegexOptions.IgnoreCase)]
+    private static partial Regex OgImagePattern();
+
     [GeneratedRegex(@"title=""([^""]+)"">\s*<a\s+href=""/song/([a-f0-9-]+)""", RegexOptions.IgnoreCase)]
     private static partial Regex PlaylistSongPattern();
 
@@ -67,13 +70,15 @@ public sealed partial class SunoMetadataClient(
 
     private SunoTrack? ParseSongPage(string songId, string html)
     {
+        var imageUrl = ParseOgImage(html);
+
         // <title> format: "{Title} by {Artist} | Suno"
         var titleMatch = TitleTagPattern().Match(html);
         if (titleMatch.Success)
         {
             var title = titleMatch.Groups[1].Value.Trim();
             var artist = titleMatch.Groups[2].Value.Trim();
-            return new SunoTrack(title, artist, songId);
+            return new SunoTrack(title, artist, songId, imageUrl);
         }
 
         // Fallback: use og:title (title only, no artist)
@@ -81,7 +86,7 @@ public sealed partial class SunoMetadataClient(
         if (ogTitleMatch.Success)
         {
             var title = ogTitleMatch.Groups[1].Value.Trim();
-            return new SunoTrack(title, Artist: null, songId);
+            return new SunoTrack(title, Artist: null, songId, imageUrl);
         }
 
         logger.LogWarning("Could not parse metadata from Suno song page for {SongId}.", songId);
@@ -147,6 +152,12 @@ public sealed partial class SunoMetadataClient(
     private static string? ParseOgTitle(string html)
     {
         var match = OgTitlePattern().Match(html);
+        return match.Success ? match.Groups[1].Value.Trim() : null;
+    }
+
+    private static string? ParseOgImage(string html)
+    {
+        var match = OgImagePattern().Match(html);
         return match.Success ? match.Groups[1].Value.Trim() : null;
     }
 

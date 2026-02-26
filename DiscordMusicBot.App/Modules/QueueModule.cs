@@ -33,8 +33,12 @@ public sealed class QueueModule(
 
         if (!SupportedSources.IsSupported(url))
         {
-            await ModifyOriginalResponseAsync(props => props.Content =
-                $"Unsupported source. {SupportedSources.GetSupportedSourcesMessage()}");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Unsupported Source",
+                    SupportedSources.GetSupportedSourcesMessage());
+            });
             logger.LogInformation("User {UserId} provided unsupported source {Url} in guild {GuildId}", userId, url,
                 guildId);
             return;
@@ -45,13 +49,17 @@ public sealed class QueueModule(
 
         if (!musicItemsResult.IsSuccess)
         {
-            await ModifyOriginalResponseAsync(props => props.Content =
-                $"Failed to process URL: {musicItemsResult.ErrorMessage}");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Failed to Process URL",
+                    musicItemsResult.ErrorMessage ?? "An unknown error occurred.");
+            });
             return;
         }
 
         var queueItems = musicItemsResult.Value!.Items
-            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
+            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl)).ToArray();
 
         await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
 
@@ -69,14 +77,22 @@ public sealed class QueueModule(
     {
         if (!long.TryParse(favoriteIdStr, out var favoriteId))
         {
-            await ModifyOriginalResponseAsync(props => props.Content = "Invalid favorite selection.");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Invalid Selection", "The favorite selection is invalid.");
+            });
             return;
         }
 
         var favorite = await favoriteRepository.GetByIdAsync(favoriteId);
         if (favorite is null || favorite.UserId != userId)
         {
-            await ModifyOriginalResponseAsync(props => props.Content = "Favorite not found.");
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Not Found", "Favorite not found.");
+            });
             return;
         }
 
@@ -89,8 +105,12 @@ public sealed class QueueModule(
         {
             if (!SupportedSources.IsSupported(favorite.Url))
             {
-                await ModifyOriginalResponseAsync(props => props.Content =
-                    "The source for this favorite is no longer supported.");
+                await ModifyOriginalResponseAsync(props =>
+                {
+                    props.Content = null;
+                    props.Embed = ErrorEmbedBuilder.Build("Unsupported Source",
+                        "The source for this favorite is no longer supported.");
+                });
                 return;
             }
 
@@ -99,20 +119,24 @@ public sealed class QueueModule(
 
             if (!musicItemsResult.IsSuccess)
             {
-                await ModifyOriginalResponseAsync(props => props.Content =
-                    $"Failed to resolve playlist: {musicItemsResult.ErrorMessage}");
+                await ModifyOriginalResponseAsync(props =>
+                {
+                    props.Content = null;
+                    props.Embed = ErrorEmbedBuilder.Build("Failed to Resolve Playlist",
+                        musicItemsResult.ErrorMessage ?? "An unknown error occurred.");
+                });
                 return;
             }
 
             queueItems = musicItemsResult.Value!.Items
-                .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration)).ToArray();
+                .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl)).ToArray();
         }
         else
         {
             queueItems =
             [
                 PlayQueueItem.Create(guildId, userId, favorite.Url, favorite.Title,
-                    favorite.Author, favorite.Duration)
+                    favorite.Author, favorite.Duration, favorite.ThumbnailUrl)
             ];
         }
 
@@ -143,7 +167,10 @@ public sealed class QueueModule(
             logger.LogInformation("Failed to shuffle queue in guild {GuildId}: {ErrorMessage}", guildId,
                 result.ErrorMessage);
             await ModifyOriginalResponseAsync(props =>
-                props.Content = $"Failed to shuffle queue: {result.ErrorMessage}");
+            {
+                props.Embed = ErrorEmbedBuilder.Build("Shuffle Failed",
+                    result.ErrorMessage ?? "An unknown error occurred.");
+            });
             return;
         }
 
@@ -159,13 +186,26 @@ public sealed class QueueModule(
 
         if (queuePlaybackService.IsPlaying(guildId))
         {
-            await RespondAsync("Queue is already playing.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Already Playing", "The queue is already playing."),
+                ephemeral: true);
             return;
         }
 
         await DeferAsync();
 
-        await queuePlaybackService.StartAsync(guildId, Context.Channel);
+        var result = await queuePlaybackService.StartAsync(guildId, Context.Channel);
+
+        if (!result.IsSuccess)
+        {
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Embed = ErrorEmbedBuilder.Build("Queue is Empty",
+                    "There are no tracks to play.",
+                    "Use `/queue add <url>` to add tracks first.");
+            });
+            return;
+        }
 
         await ModifyOriginalResponseAsync(props =>
             props.Content = $"{Context.User.Mention} resumed the queue.");
@@ -178,7 +218,9 @@ public sealed class QueueModule(
 
         if (!queuePlaybackService.IsPlaying(guildId))
         {
-            await RespondAsync("Queue is not playing.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Not Playing", "The queue is not currently playing."),
+                ephemeral: true);
             return;
         }
 
@@ -210,7 +252,9 @@ public sealed class QueueModule(
 
         if (!queuePlaybackService.IsPlaying(guildId))
         {
-            await RespondAsync("Queue is not playing.", ephemeral: true);
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Not Playing", "The queue is not currently playing."),
+                ephemeral: true);
             return;
         }
 
@@ -234,10 +278,11 @@ public sealed class QueueModule(
 
         var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize + 1);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var stats = await queuePlaybackService.GetQueueStatsAsync(guildId);
         var hasNextPage = items.Count > pageSize;
         var pageItems = hasNextPage ? items.Take(pageSize).ToList() : items;
 
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize, stats);
         var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage);
 
         await RespondAsync(embed: embed, components: components);

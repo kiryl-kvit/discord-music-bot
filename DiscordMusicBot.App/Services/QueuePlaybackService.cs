@@ -53,6 +53,32 @@ public sealed partial class QueuePlaybackService(
         return await queueRepository.GetPageAsync(guildId, skip + offset, take, cancellationToken);
     }
 
+    public async Task<QueueStats> GetQueueStatsAsync(ulong guildId,
+        CancellationToken cancellationToken = default)
+    {
+        var state = GetState(guildId);
+        var (count, totalDurationMs) = await queueRepository.GetCountAndTotalDurationMsAsync(guildId, cancellationToken);
+
+        if (state.CurrentItem is not { } currentItem)
+        {
+            return new QueueStats(count, TimeSpan.FromMilliseconds(totalDurationMs));
+        }
+
+        var headItem = await queueRepository.PeekNextAsync(guildId, cancellationToken: cancellationToken);
+        if (headItem?.Id != currentItem.Id)
+        {
+            return new QueueStats(count, TimeSpan.FromMilliseconds(totalDurationMs));
+        }
+
+        count = Math.Max(0, count - 1);
+        if (currentItem.Duration.HasValue)
+        {
+            totalDurationMs = Math.Max(0, totalDurationMs - (long)currentItem.Duration.Value.TotalMilliseconds);
+        }
+
+        return new QueueStats(count, TimeSpan.FromMilliseconds(totalDurationMs));
+    }
+
     public async Task EnqueueItemsAsync(ulong guildId, IEnumerable<PlayQueueItem> items,
         IMessageChannel? feedbackChannel = null, CancellationToken cancellationToken = default)
     {
@@ -117,7 +143,7 @@ public sealed partial class QueuePlaybackService(
         await ClearPersistedStateAsync(guildId, cancellationToken);
     }
 
-    public async Task StartAsync(ulong guildId, IMessageChannel? feedbackChannel = null,
+    public async Task<Result> StartAsync(ulong guildId, IMessageChannel? feedbackChannel = null,
         CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
@@ -130,14 +156,14 @@ public sealed partial class QueuePlaybackService(
         if (state.IsPlaying)
         {
             logger.LogInformation("Queue is already playing in guild {GuildId}", guildId);
-            return;
+            return Result.Success();
         }
 
         var count = await queueRepository.GetCountAsync(guildId, cancellationToken);
         if (count == 0)
         {
             logger.LogInformation("Queue is empty in guild {GuildId}, nothing to start", guildId);
-            return;
+            return Result.Failure("Queue is empty.");
         }
 
         state.PauseCts = new CancellationTokenSource();
@@ -146,6 +172,7 @@ public sealed partial class QueuePlaybackService(
         logger.LogInformation("Starting queue playback in guild {GuildId}", guildId);
 
         state.PlaybackLoopTask = RunAdvancementLoopAsync(guildId);
+        return Result.Success();
     }
 
     public async Task PauseAsync(ulong guildId, CancellationToken cancellationToken = default)
@@ -687,11 +714,7 @@ public sealed partial class QueuePlaybackService(
 
         try
         {
-            var embed = new EmbedBuilder()
-                .WithColor(Color.Red)
-                .WithTitle(title)
-                .WithDescription(description)
-                .Build();
+            var embed = ErrorEmbedBuilder.Build(title, description);
 
             await channel.SendMessageAsync(embed: embed,
                 options: new RequestOptions { CancelToken = cancellationToken });

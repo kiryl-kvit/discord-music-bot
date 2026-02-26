@@ -19,8 +19,9 @@ public sealed class VoiceModule(
         if (voiceChannel is null)
         {
             await RespondAsync(
-                "You must be in a voice channel first. " +
-                "If you are in a private voice channel, make sure I have the **View Channel** permission on it.",
+                embed: ErrorEmbedBuilder.Build("Not in Voice Channel",
+                    "You must be in a voice channel first.",
+                    "Join a voice channel and try again. If you are in a private voice channel, make sure I have the **View Channel** permission on it."),
                 ephemeral: true);
             return;
         }
@@ -31,8 +32,9 @@ public sealed class VoiceModule(
         if (!permissions.Connect || !permissions.Speak)
         {
             await RespondAsync(
-                "I don't have permission to connect or speak in that voice channel. " +
-                "Please grant me the **Connect** and **Speak** permissions on the channel.",
+                embed: ErrorEmbedBuilder.Build("Missing Permissions",
+                    "I don't have permission to connect or speak in that voice channel.",
+                    "Please grant me the **Connect** and **Speak** permissions on the channel."),
                 ephemeral: true);
             return;
         }
@@ -50,8 +52,12 @@ public sealed class VoiceModule(
             logger.LogError(ex, "Failed to join voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
                 voiceChannel.Name, voiceChannel.Id, Context.Guild.Id);
             await ModifyOriginalResponseAsync(props =>
-                props.Content =
-                    "Failed to join the voice channel. Please check that the bot has permission to join and speak in the channel.");
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Failed to Join",
+                    "Failed to join the voice channel.",
+                    "Please check that the bot has permission to join and speak in the channel.");
+            });
         }
     }
 
@@ -64,8 +70,9 @@ public sealed class VoiceModule(
         if (voiceChannel is null)
         {
             await RespondAsync(
-                "You must be in a voice channel first. " +
-                "If you are in a private voice channel, make sure I have the **View Channel** permission on it.",
+                embed: ErrorEmbedBuilder.Build("Not in Voice Channel",
+                    "You must be in a voice channel first.",
+                    "Join a voice channel and try again. If you are in a private voice channel, make sure I have the **View Channel** permission on it."),
                 ephemeral: true);
             return;
         }
@@ -83,8 +90,12 @@ public sealed class VoiceModule(
             logger.LogError(ex, "Failed to leave voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
                 voiceChannel.Name, voiceChannel.Id, Context.Guild.Id);
             await ModifyOriginalResponseAsync(props =>
-                props.Content =
-                    "Failed to leave the voice channel. Please check that the bot has permission to leave the channel.");
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Failed to Leave",
+                    "Failed to leave the voice channel.",
+                    "Please check that the bot has permission to leave the channel.");
+            });
         }
     }
 }

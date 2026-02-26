@@ -31,7 +31,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         var guildIdStr = guildId.ToString();
 
         var sb = new StringBuilder();
-        sb.Append("INSERT INTO play_queue_items (guild_id, user_id, url, title, author, duration_ms, position) VALUES ");
+        sb.Append("INSERT INTO play_queue_items (guild_id, user_id, url, title, author, duration_ms, thumbnail_url, position) VALUES ");
 
         var parameters = new DynamicParameters();
         parameters.Add("GuildId", guildIdStr);
@@ -43,7 +43,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 sb.Append(", ");
             }
 
-            sb.Append($"(@GuildId, @UserId{i}, @Url{i}, @Title{i}, @Author{i}, @DurationMs{i}, @Position{i})");
+            sb.Append($"(@GuildId, @UserId{i}, @Url{i}, @Title{i}, @Author{i}, @DurationMs{i}, @ThumbnailUrl{i}, @Position{i})");
 
             var item = items[i];
             parameters.Add($"UserId{i}", item.UserId.ToString());
@@ -51,6 +51,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             parameters.Add($"Title{i}", item.Title);
             parameters.Add($"Author{i}", item.Author);
             parameters.Add($"DurationMs{i}", item.Duration.HasValue ? (long?)item.Duration.Value.TotalMilliseconds : null);
+            parameters.Add($"ThumbnailUrl{i}", item.ThumbnailUrl);
             parameters.Add($"Position{i}", nextPosition + i);
         }
 
@@ -76,7 +77,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         var row = await connection.QueryFirstOrDefaultAsync<PlayQueueItemRow>(
             new CommandDefinition(
                 """
-                SELECT id, guild_id, user_id, url, title, author, duration_ms, position
+                SELECT id, guild_id, user_id, url, title, author, duration_ms, thumbnail_url, position
                 FROM play_queue_items
                 WHERE guild_id = @GuildId
                 ORDER BY position
@@ -205,7 +206,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         var rows = await connection.QueryAsync<PlayQueueItemRow>(
             new CommandDefinition(
                 """
-                SELECT id, guild_id, user_id, url, title, author, duration_ms, position
+                SELECT id, guild_id, user_id, url, title, author, duration_ms, thumbnail_url, position
                 FROM play_queue_items
                 WHERE guild_id = @GuildId
                 ORDER BY position
@@ -226,5 +227,19 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 "SELECT COUNT(*) FROM play_queue_items WHERE guild_id = @GuildId",
                 new { GuildId = guildId.ToString() },
                 cancellationToken: cancellationToken));
+    }
+
+    public async Task<(int Count, long TotalDurationMs)> GetCountAndTotalDurationMsAsync(ulong guildId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+
+        var row = await connection.QuerySingleAsync<(int Count, long TotalDurationMs)>(
+            new CommandDefinition(
+                "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM play_queue_items WHERE guild_id = @GuildId",
+                new { GuildId = guildId.ToString() },
+                cancellationToken: cancellationToken));
+
+        return row;
     }
 }

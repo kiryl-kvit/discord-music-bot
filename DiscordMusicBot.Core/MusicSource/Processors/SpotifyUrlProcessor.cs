@@ -117,6 +117,7 @@ public sealed partial class SpotifyUrlProcessor(
             var client = spotifyClientProvider.GetClient();
 
             var album = await client.Albums.Get(albumId, cancellationToken);
+            var albumImageUrl = album.Images?.FirstOrDefault()?.Url;
 
             var spotifyTracks = new List<SpotifyTrack>();
 
@@ -127,7 +128,7 @@ public sealed partial class SpotifyUrlProcessor(
                     break;
                 }
 
-                spotifyTracks.Add(SpotifyTrack.FromSimpleTrack(track));
+                spotifyTracks.Add(SpotifyTrack.FromSimpleTrack(track, albumImageUrl));
             }
 
             return await ResolveTracksToYoutubeAsync(spotifyTracks, album.Name, cancellationToken);
@@ -192,7 +193,8 @@ public sealed partial class SpotifyUrlProcessor(
 
             var youtubeUrl = YoutubeHelpers.VideoUrl(firstResult.Id);
 
-            return new MusicSource(spotifyTrack.Title, youtubeUrl, spotifyTrack.Artist, spotifyTrack.Duration);
+            return new MusicSource(spotifyTrack.Title, youtubeUrl, spotifyTrack.Artist, spotifyTrack.Duration,
+                spotifyTrack.ImageUrl);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
