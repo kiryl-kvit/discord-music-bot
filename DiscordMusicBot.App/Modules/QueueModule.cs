@@ -87,6 +87,13 @@ public sealed class QueueModule(
 
         if (favorite.IsPlaylist)
         {
+            if (!SupportedSources.IsSupported(favorite.Url))
+            {
+                await ModifyOriginalResponseAsync(props => props.Content =
+                    "The source for this favorite is no longer supported.");
+                return;
+            }
+
             var urlProcessor = urlProcessorFactory.GetProcessor(favorite.Url);
             var musicItemsResult = await urlProcessor.GetMusicItemsAsync(favorite.Url);
 
@@ -102,8 +109,11 @@ public sealed class QueueModule(
         }
         else
         {
-            queueItems = [PlayQueueItem.Create(guildId, userId, favorite.Url, favorite.Title,
-                favorite.Author, favorite.Duration)];
+            queueItems =
+            [
+                PlayQueueItem.Create(guildId, userId, favorite.Url, favorite.Title,
+                    favorite.Author, favorite.Duration)
+            ];
         }
 
         await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
