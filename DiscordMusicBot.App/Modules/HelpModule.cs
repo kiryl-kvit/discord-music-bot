@@ -40,6 +40,7 @@ public sealed class HelpModule : InteractionModuleBase
                 "`/fav remove <favorite>` — Remove a favorite\n" +
                 "`/fav rename <favorite> <new_name>` — Rename a favorite")
             .AddField("Other",
+                "`/now` — Show the currently playing track\n" +
                 "`/help` — Show this help message")
             .Build();
     }

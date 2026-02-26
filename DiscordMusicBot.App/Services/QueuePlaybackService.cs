@@ -367,6 +367,7 @@ public sealed partial class QueuePlaybackService(
     {
         var state = GetState(guildId);
         var pauseToken = state.PauseCts!.Token;
+        var isFirstTrack = state.NowPlayingMessage is null;
 
         try
         {
@@ -388,7 +389,16 @@ public sealed partial class QueuePlaybackService(
                     item.Title, item.Author ?? "Unknown", item.Duration, guildId);
 
                 await SetActivityAsync(item.Title, pauseToken);
-                await SendOrUpdateNowPlayingAsync(guildId, item, isPaused: false, pauseToken);
+
+                if (isFirstTrack)
+                {
+                    await SendOrUpdateNowPlayingAsync(guildId, item, isPaused: false, pauseToken);
+                    isFirstTrack = false;
+                }
+                else
+                {
+                    await DeleteNowPlayingAsync(guildId, CancellationToken.None);
+                }
 
                 if (item.Duration is { } d && d <= TimeSpan.Zero)
                 {
@@ -719,7 +729,6 @@ public sealed partial class QueuePlaybackService(
         }
 
         var embed = NowPlayingEmbedBuilder.BuildEmbed(item, isPaused);
-        var components = NowPlayingEmbedBuilder.BuildControls(isPaused);
 
         try
         {
@@ -728,13 +737,12 @@ public sealed partial class QueuePlaybackService(
                 await existing.ModifyAsync(msg =>
                 {
                     msg.Embed = embed;
-                    msg.Components = components;
                 }, new RequestOptions { CancelToken = cancellationToken });
                 return;
             }
 
             state.NowPlayingMessage = await channel.SendMessageAsync(
-                embed: embed, components: components,
+                embed: embed,
                 options: new RequestOptions { CancelToken = cancellationToken });
         }
         catch (Exception ex)
@@ -754,6 +762,17 @@ public sealed partial class QueuePlaybackService(
         }
 
         await SendOrUpdateNowPlayingAsync(guildId, state.CurrentItem, isPaused, cancellationToken);
+    }
+
+    public async Task DeleteNowPlayingMessageAsync(ulong guildId, CancellationToken cancellationToken = default)
+    {
+        await DeleteNowPlayingAsync(guildId, cancellationToken);
+    }
+
+    public void SetNowPlayingMessage(ulong guildId, IUserMessage message)
+    {
+        var state = GetState(guildId);
+        state.NowPlayingMessage = message;
     }
 
     private async Task DeleteNowPlayingAsync(ulong guildId, CancellationToken cancellationToken)

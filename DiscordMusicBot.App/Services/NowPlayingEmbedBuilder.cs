@@ -29,16 +29,4 @@ public static class NowPlayingEmbedBuilder
 
         return builder.Build();
     }
-
-    public static MessageComponent BuildControls(bool isPaused)
-    {
-        return new ComponentBuilder()
-            .WithButton(isPaused ? "Resume" : "Pause", "np:pauseresume",
-                isPaused ? ButtonStyle.Success : ButtonStyle.Secondary,
-                new Emoji(isPaused ? "\u25B6\uFE0F" : "\u23F8\uFE0F"))
-            .WithButton("Skip", "np:skip", ButtonStyle.Primary, new Emoji("\u23ED\uFE0F"))
-            .WithButton("Shuffle", "np:shuffle", ButtonStyle.Secondary, new Emoji("\uD83D\uDD00"))
-            .WithButton("Queue", "np:queue", ButtonStyle.Secondary, new Emoji("\uD83D\uDCCB"))
-            .Build();
-    }
 }
