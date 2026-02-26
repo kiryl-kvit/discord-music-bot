@@ -31,6 +31,7 @@ public class HelpModule : InteractionModuleBase
             .AddField("/fav add `<url>` `[alias]`", "Save a track or playlist to your favorites.", inline: false)
             .AddField("/fav list `[page]`", "Show your favorites with pagination.", inline: false)
             .AddField("/fav remove `<favorite>`", "Remove a favorite by name (autocomplete).", inline: false)
+            .AddField("/fav rename `<favorite>` `<new_name>`", "Rename a favorite (autocomplete).", inline: false)
             .Build();
     }
 }

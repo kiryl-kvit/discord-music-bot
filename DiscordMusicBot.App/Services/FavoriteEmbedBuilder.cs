@@ -78,6 +78,15 @@ public static class FavoriteEmbedBuilder
             .Build();
     }
 
+    public static Embed BuildRenamedEmbed(FavoriteItem item, string oldDisplayName)
+    {
+        return new EmbedBuilder()
+            .WithTitle("Favorite Renamed")
+            .WithColor(Color.Gold)
+            .WithDescription($"**{oldDisplayName}** has been renamed to **{item.DisplayName}**.")
+            .Build();
+    }
+
     public static MessageComponent BuildPageControls(int page, bool hasNextPage)
     {
         return new ComponentBuilder()

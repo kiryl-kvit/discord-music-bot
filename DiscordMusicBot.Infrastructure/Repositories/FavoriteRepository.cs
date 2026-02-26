@@ -132,4 +132,18 @@ public sealed class FavoriteRepository(SqliteConnectionFactory connectionFactory
 
         return rows.Select(r => r.ToFavoriteItem()).ToArray();
     }
+
+    public async Task<bool> UpdateAliasAsync(long id, ulong userId, string alias,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+
+        var affected = await connection.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE favorite_items SET alias = @Alias WHERE id = @Id AND user_id = @UserId",
+                new { Alias = alias, Id = id, UserId = userId.ToString() },
+                cancellationToken: cancellationToken));
+
+        return affected > 0;
+    }
 }

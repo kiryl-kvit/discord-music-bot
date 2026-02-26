@@ -16,6 +16,11 @@ public sealed class FavoriteItem
 
     public string DisplayName => Alias ?? Title;
 
+    public void UpdateAlias(string newAlias)
+    {
+        Alias = newAlias.Trim();
+    }
+
     private FavoriteItem()
     {
     }

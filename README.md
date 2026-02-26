@@ -18,24 +18,6 @@ Spotify resolves tracks to YouTube for audio playback. Suno streams audio direct
 - **[Development Guide](docs/DEVELOPMENT.md)** -- local setup, project structure
 - **[Deployment Guide](docs/DEPLOYMENT.md)** -- Discord app setup, optional integrations, Docker
 
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/queue add <url>` | Enqueue a track, playlist, or favorite |
-| `/queue list` | Show the current queue |
-| `/queue skip [count]` | Skip one or more tracks |
-| `/queue shuffle` | Shuffle the queue |
-| `/queue pause` | Pause playback |
-| `/queue resume` | Resume playback |
-| `/queue clear` | Clear all items from the queue |
-| `/fav add <url> [alias]` | Save a track or playlist to your favorites |
-| `/fav list [page]` | Show your saved favorites |
-| `/fav remove <favorite>` | Remove a favorite (supports autocomplete) |
-| `/join` | Join your voice channel |
-| `/leave` | Leave the voice channel |
-| `/help` | Show available commands |
-
 ## Environment Variables
 
 | Variable | Required | Default | Description |

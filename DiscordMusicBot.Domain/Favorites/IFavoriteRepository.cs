@@ -9,4 +9,5 @@ public interface IFavoriteRepository
     Task<IReadOnlyList<FavoriteItem>> GetByUserAsync(ulong userId, int skip, int take, CancellationToken cancellationToken = default);
     Task<int> GetCountAsync(ulong userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<FavoriteItem>> SearchAsync(ulong userId, string query, int limit, CancellationToken cancellationToken = default);
+    Task<bool> UpdateAliasAsync(long id, ulong userId, string alias, CancellationToken cancellationToken = default);
 }

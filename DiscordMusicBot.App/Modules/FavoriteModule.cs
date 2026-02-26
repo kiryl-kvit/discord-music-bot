@@ -131,4 +131,42 @@ public sealed class FavoriteModule(
         var embed = FavoriteEmbedBuilder.BuildRemovedEmbed(item);
         await RespondAsync(embed: embed, ephemeral: true);
     }
+
+    [SlashCommand("rename", "Rename a favorite")]
+    public async Task RenameAsync(
+        [Summary("favorite"), Autocomplete(typeof(FavoriteAutocompleteHandler))] string favoriteIdStr,
+        [Summary("new_name")] string newName)
+    {
+        var userId = Context.User.Id;
+
+        if (!long.TryParse(favoriteIdStr, out var favoriteId))
+        {
+            await RespondAsync("Invalid favorite selection.", ephemeral: true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            await RespondAsync("New name cannot be empty.", ephemeral: true);
+            return;
+        }
+
+        var item = await favoriteRepository.GetByIdAsync(favoriteId);
+        if (item is null || item.UserId != userId)
+        {
+            await RespondAsync("Favorite not found.", ephemeral: true);
+            return;
+        }
+
+        var oldDisplayName = item.DisplayName;
+        item.UpdateAlias(newName);
+
+        await favoriteRepository.UpdateAliasAsync(favoriteId, userId, item.Alias!);
+
+        logger.LogInformation("User {UserId} renamed favorite {FavoriteId}: {OldName} -> {NewName}",
+            userId, favoriteId, oldDisplayName, item.DisplayName);
+
+        var embed = FavoriteEmbedBuilder.BuildRenamedEmbed(item, oldDisplayName);
+        await RespondAsync(embed: embed, ephemeral: true);
+    }
 }
