@@ -37,7 +37,7 @@ public static class QueueEmbedBuilder
 
     private static string FormatNowPlaying(PlayQueueItem item)
     {
-        return $"{item.Title} - {item.Author ?? UnknownAuthor}";
+        return $"{item.Title} - {item.Author ?? UnknownAuthor} (requested by {DiscordFormatter.MentionUser(item.UserId)})";
     }
 
     private static string FormatQueueLine(PlayQueueItem item, int page, int pageSize, int index)
@@ -46,7 +46,7 @@ public static class QueueEmbedBuilder
         var duration = item.Duration is not null
             ? DateFormatter.FormatTime(item.Duration.Value)
             : UnknownDuration;
-        return $"`{position}.` **{item.Title}** - {item.Author ?? UnknownAuthor} `[{duration}]`";
+        return $"`{position}.` **{item.Title}** - {item.Author ?? UnknownAuthor} `[{duration}]` - added by {DiscordFormatter.MentionUser(item.UserId)}";
     }
 
     public static MessageComponent BuildQueuePageControls(int page, bool hasNextPage)
@@ -72,13 +72,14 @@ public static class QueueEmbedBuilder
                 : UnknownDuration;
 
             builder.WithTitle("Added to Queue");
-            builder.WithDescription($"**{item.Title}**");
+            builder.WithDescription($"**{item.Title}**\nRequested by {DiscordFormatter.MentionUser(item.UserId)}");
             builder.AddField("Artist", item.Author ?? UnknownAuthor, inline: true);
             builder.AddField("Duration", duration, inline: true);
         }
         else
         {
             builder.WithTitle($"Added {items.Length} Tracks to Queue");
+            builder.WithDescription($"Requested by {DiscordFormatter.MentionUser(items[0].UserId)}");
 
             var totalDuration = items
                 .Where(x => x.Duration.HasValue)
@@ -123,13 +124,13 @@ public static class QueueEmbedBuilder
             if (skippedItem is not null)
             {
                 builder.WithDescription(
-                    $"Starting from: **{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor}");
+                    $"Starting from: **{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor} (requested by {DiscordFormatter.MentionUser(skippedItem.UserId)})");
             }
         }
         else if (skippedItem is not null)
         {
             builder.WithTitle("Skipped")
-                .WithDescription($"**{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor}");
+                .WithDescription($"**{skippedItem.Title}** - {skippedItem.Author ?? UnknownAuthor} (requested by {DiscordFormatter.MentionUser(skippedItem.UserId)})");
         }
         else
         {
@@ -143,7 +144,7 @@ public static class QueueEmbedBuilder
                 : UnknownDuration;
 
             builder.AddField("Up Next",
-                $"**{nextItem.Title}** - {nextItem.Author ?? UnknownAuthor} `[{duration}]`");
+                $"**{nextItem.Title}** - {nextItem.Author ?? UnknownAuthor} `[{duration}]` - added by {DiscordFormatter.MentionUser(nextItem.UserId)}");
         }
         else
         {
