@@ -13,7 +13,7 @@ public class InteractionHandler(
 {
     private bool _registered;
 
-    public async Task InitializeAsync()
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         client.Ready += OnReadyAsync;
         client.InteractionCreated += OnInteractionCreatedAsync;

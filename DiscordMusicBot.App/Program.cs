@@ -1,14 +1,8 @@
-using Discord;
-using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using DiscordMusicBot.App;
 using DiscordMusicBot.App.Configuration;
-using DiscordMusicBot.App.Options;
-using DiscordMusicBot.App.Services;
-using Microsoft.Extensions.Options;
 
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration((_, config) =>
@@ -25,21 +19,5 @@ var host = Host.CreateDefaultBuilder(args)
         logging.AddConsole();
     })
     .Build();
-
-var voiceConnectionService = host.Services.GetRequiredService<VoiceConnectionService>();
-var queuePlaybackService = host.Services.GetRequiredService<QueuePlaybackService>();
-
-var discordClient = host.Services.GetRequiredService<DiscordSocketClient>();
-discordClient.UserVoiceStateUpdated += voiceConnectionService.HandleVoiceStateUpdated;
-
-voiceConnectionService.Connected += queuePlaybackService.OnVoiceConnected;
-voiceConnectionService.Disconnected += queuePlaybackService.OnVoiceDisconnected;
-
-var interactionHandler = host.Services.GetRequiredService<InteractionHandler>();
-await interactionHandler.InitializeAsync();
-
-var botSettings = host.Services.GetRequiredService<IOptions<BotSettings>>().Value;
-await discordClient.LoginAsync(TokenType.Bot, botSettings.BotToken);
-await discordClient.StartAsync();
 
 await host.RunAsync();

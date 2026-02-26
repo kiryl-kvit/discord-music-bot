@@ -54,4 +54,5 @@ docker run -d --env-file .env ghcr.io/kiryl-kvit/discord-music-bot:latest
 DiscordMusicBot.App/          # Startup, Discord interactions, slash commands
 DiscordMusicBot.Core/         # Business logic, audio streaming, URL processing
 DiscordMusicBot.Domain/       # Domain models
+DiscordMusicBot.Infrastructure/ # SQLite persistence, migrations, repositories
 ```

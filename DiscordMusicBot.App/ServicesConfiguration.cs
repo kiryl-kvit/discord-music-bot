@@ -14,6 +14,7 @@ using DiscordMusicBot.Core.MusicSource.Suno;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using DiscordMusicBot.Infrastructure;
 using Microsoft.Extensions.Options;
 using YoutubeExplode;
 
@@ -25,6 +26,8 @@ public static class ServicesConfiguration
     {
         services.ConfigureBotOptions(configuration)
             .ConfigureDiscordDotNet();
+
+        services.AddInfrastructure(configuration);
 
         services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SupportedSources.YoutubeKey);
         services.AddScoped<IUrlProcessorFactory, UrlProcessorFactory>();
@@ -95,6 +98,8 @@ public static class ServicesConfiguration
 
             services.AddSingleton<VoiceConnectionService>();
             services.AddSingleton<QueuePlaybackService>();
+
+            services.AddHostedService<BotHostedService>();
 
             return services;
         }

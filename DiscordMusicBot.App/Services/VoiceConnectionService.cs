@@ -2,18 +2,20 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
+using DiscordMusicBot.App.Services.Models;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Services;
 
 public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<VoiceConnectionService> logger)
 {
-    private readonly ConcurrentDictionary<ulong, IAudioClient> _connections = new();
+    private readonly ConcurrentDictionary<ulong, VoiceConnection> _connections = new();
 
     public event Func<ulong, Task>? Connected;
     public event Func<ulong, Task>? Disconnected;
 
-    public async Task<IAudioClient> JoinAsync(IVoiceChannel channel)
+    public async Task<IAudioClient> JoinAsync(IVoiceChannel channel,
+        CancellationToken cancellationToken = default)
     {
         var guildId = channel.GuildId;
 
@@ -21,7 +23,7 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         {
             try
             {
-                await existing.StopAsync();
+                await existing.Client.StopAsync();
             }
             catch (Exception ex)
             {
@@ -32,12 +34,17 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         logger.LogInformation("Joining voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(10));
         IAudioClient audioClient;
 
         try
         {
             audioClient = await channel.ConnectAsync(selfDeaf: true).WaitAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (OperationCanceledException)
         {
@@ -48,7 +55,7 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
 
         audioClient.Disconnected += exception => OnAudioClientDisconnected(guildId, exception);
 
-        _connections[guildId] = audioClient;
+        _connections[guildId] = new VoiceConnection(audioClient, channel.Id);
 
         logger.LogInformation("Connected to voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
@@ -58,15 +65,17 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
         return audioClient;
     }
 
-    public async Task LeaveAsync(IVoiceChannel channel)
+    public async Task LeaveAsync(IVoiceChannel channel, CancellationToken cancellationToken = default)
     {
         var guildId = channel.GuildId;
 
         if (_connections.TryRemove(guildId, out var existing))
         {
+            await NotifyDisconnectedAsync(guildId);
+
             try
             {
-                await existing.StopAsync();
+                await existing.Client.StopAsync();
             }
             catch (Exception ex)
             {
@@ -81,8 +90,6 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
 
         logger.LogInformation("Disconnected from voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
-
-        await NotifyDisconnectedAsync(guildId);
     }
 
     private async Task NotifyConnectedAsync(ulong guildId)
@@ -103,24 +110,39 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
 
     public IAudioClient? GetConnection(ulong guildId)
     {
-        return _connections.GetValueOrDefault(guildId);
+        return _connections.TryGetValue(guildId, out var connection) ? connection.Client : null;
     }
 
-    public async Task DisconnectAsync(ulong guildId)
+    public ulong? GetVoiceChannelId(ulong guildId)
     {
-        if (!_connections.TryRemove(guildId, out var audioClient))
+        return _connections.TryGetValue(guildId, out var connection) ? connection.ChannelId : null;
+    }
+
+    public async Task DisconnectAsync(ulong guildId, CancellationToken cancellationToken = default)
+    {
+        if (!_connections.TryRemove(guildId, out var connection))
         {
             return;
         }
 
         try
         {
-            await audioClient.StopAsync();
+            await connection.Client.StopAsync();
             logger.LogInformation("Disconnected from voice in guild {GuildId}", guildId);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Error disconnecting audio client for guild {GuildId}", guildId);
+        }
+    }
+
+    public async Task DisconnectAllAsync(CancellationToken cancellationToken = default)
+    {
+        var guildIds = _connections.Keys.ToArray();
+
+        foreach (var guildId in guildIds)
+        {
+            await DisconnectAsync(guildId, cancellationToken);
         }
     }
 
@@ -143,6 +165,11 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
                     beforeChannel.Name, beforeChannel.Id,
                     afterChannel.Name, afterChannel.Id,
                     afterChannel.Guild.Id);
+
+                if (_connections.TryGetValue(afterChannel.Guild.Id, out var conn))
+                {
+                    _connections[afterChannel.Guild.Id] = conn with { ChannelId = afterChannel.Id };
+                }
             }
         }
         else if (beforeChannel is not null && afterChannel is null)

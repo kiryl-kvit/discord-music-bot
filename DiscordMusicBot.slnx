@@ -2,6 +2,7 @@
   <Project Path="DiscordMusicBot.App/DiscordMusicBot.App.csproj" />
   <Project Path="DiscordMusicBot.Domain/DiscordMusicBot.Domain.csproj" />
   <Project Path="DiscordMusicBot.Core/DiscordMusicBot.Core.csproj" />
+  <Project Path="DiscordMusicBot.Infrastructure/DiscordMusicBot.Infrastructure.csproj" />
   <Folder Name="/Solution Items/">
     <File Path="README.md" />
     <File Path="LICENSE" />
@@ -11,7 +12,6 @@
   <Folder Name="/Solution Items/.github/" />
   <Folder Name="/Solution Items/.github/workflows/">
     <File Path=".github/workflows/ci.yml" />
-    <File Path=".github/workflows/draft-release.yml" />
     <File Path=".github/workflows/publish-release.yml" />
   </Folder>
 </Solution>

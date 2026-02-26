@@ -68,6 +68,16 @@ No API credentials are required. The bot fetches song metadata directly from sun
 
 If this variable is not set or set to `false`, Suno links are treated as unsupported.
 
+## 7. Configure Database Path (optional)
+
+The bot uses SQLite for persistent queue storage. By default, the database file is stored at `database.db` in the working directory. To customize the path:
+
+```env
+DATABASE_PATH=/app/data/database.db
+```
+
+In Docker deployments, the database is stored at `/app/data/database.db` by default. Mount a volume to `/app/data` to persist queue data across container restarts (see Docker Compose example below).
+
 ## Docker Compose
 
 Create a `docker-compose.yml` file:
@@ -80,7 +90,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - bot-data:/app/data
     network_mode: host
+
+volumes:
+  bot-data:
 ```
 
 Create a `.env` file in the same directory:
