@@ -35,7 +35,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 """,
                 new
                 {
-                    GuildId = item.GuildId.ToString(),
+                    GuildId = guildId.ToString(),
                     UserId = item.UserId.ToString(),
                     item.Url,
                     item.Title,
@@ -119,7 +119,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             """,
             new
             {
-                GuildId = item.GuildId.ToString(),
+                GuildId = guildId.ToString(),
                 UserId = item.UserId.ToString(),
                 item.Url,
                 item.Title,

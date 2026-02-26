@@ -178,25 +178,25 @@ public sealed partial class QueuePlaybackService(
         await ClearActivityAsync();
     }
 
-    public Task<(PlayQueueItem? Skipped, PlayQueueItem? Next)> SkipAsync(ulong guildId)
+    public async Task<(PlayQueueItem? Skipped, PlayQueueItem? Next)> SkipAsync(ulong guildId)
     {
         var state = GetState(guildId);
         if (!state.IsPlaying)
         {
             logger.LogInformation("Queue is not playing in guild {GuildId}. Cannot skip", guildId);
-            return Task.FromResult(new ValueTuple<PlayQueueItem?, PlayQueueItem?>(null, null));
+            return (null, null);
         }
 
         logger.LogInformation("Skipping current track in guild {GuildId}", guildId);
 
         var currentItem = state.CurrentItem;
         var nextItem = state.PrefetchedTrack is not null
-            ? queueRepository.PeekNextAsync(guildId).GetAwaiter().GetResult()
+            ? await queueRepository.PeekNextAsync(guildId)
             : null;
         state.ResetResumeState();
         state.TriggerSkip();
 
-        return Task.FromResult(new ValueTuple<PlayQueueItem?, PlayQueueItem?>(currentItem, nextItem));
+        return (currentItem, nextItem);
     }
 
     public async Task GracefulStopAsync()

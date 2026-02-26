@@ -63,10 +63,10 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
     {
         var guildId = channel.GuildId;
 
-        await NotifyDisconnectedAsync(guildId);
-
         if (_connections.TryRemove(guildId, out var existing))
         {
+            await NotifyDisconnectedAsync(guildId);
+
             try
             {
                 await existing.Client.StopAsync();
