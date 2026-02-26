@@ -28,7 +28,6 @@ public sealed partial class QueuePlaybackService
         var state = GetState(guildId);
         state.IsConnected = false;
 
-        await DeleteNowPlayingAsync(guildId, CancellationToken.None);
         await PauseAsync(guildId);
 
         state.VoiceChannelId = null;

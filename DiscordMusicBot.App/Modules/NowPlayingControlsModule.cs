@@ -21,14 +21,8 @@ public sealed class NowPlayingControlsModule(QueuePlaybackService queuePlaybackS
             return;
         }
 
-        await queuePlaybackService.DeleteNowPlayingMessageAsync(guildId);
-
         var isPaused = !queuePlaybackService.IsPlaying(guildId);
         var embed = NowPlayingEmbedBuilder.BuildEmbed(currentItem, isPaused);
-
         await RespondAsync(embed: embed);
-
-        var response = await GetOriginalResponseAsync();
-        queuePlaybackService.SetNowPlayingMessage(guildId, response);
     }
 }

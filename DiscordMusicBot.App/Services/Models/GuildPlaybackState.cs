@@ -28,8 +28,6 @@ public sealed class GuildPlaybackState
 
     public IMessageChannel? FeedbackChannel;
 
-    public IUserMessage? NowPlayingMessage;
-
     public void ResetResumeState()
     {
         ResumePosition = TimeSpan.Zero;
@@ -75,7 +73,6 @@ public sealed class GuildPlaybackState
         CancelPlayback();
         PlaybackLoopTask = null;
         CurrentItem = null;
-        NowPlayingMessage = null;
         ClearPrefetchedTrack();
     }
 
