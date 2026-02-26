@@ -19,6 +19,8 @@ public sealed class GuildPlaybackState
     public CancellationTokenSource? PauseCts;
     public CancellationTokenSource? SkipCts;
 
+    public Task? PlaybackLoopTask;
+
     public TimeSpan ResumePosition;
     public long? ResumeItemId;
 
@@ -69,6 +71,7 @@ public sealed class GuildPlaybackState
     {
         ResetResumeState();
         CancelPlayback();
+        PlaybackLoopTask = null;
         CurrentItem = null;
         ClearPrefetchedTrack();
     }

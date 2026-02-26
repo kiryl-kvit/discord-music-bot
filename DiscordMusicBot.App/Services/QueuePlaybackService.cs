@@ -87,7 +87,12 @@ public sealed partial class QueuePlaybackService(
 
         if (state.IsPlaying)
         {
+            var loopTask = state.PlaybackLoopTask;
             await FullStopAsync(guildId);
+            if (loopTask is not null)
+            {
+                await loopTask;
+            }
         }
 
         state.ResetResumeState();
@@ -123,7 +128,7 @@ public sealed partial class QueuePlaybackService(
 
         logger.LogInformation("Starting queue playback in guild {GuildId}", guildId);
 
-        _ = RunAdvancementLoopAsync(guildId);
+        state.PlaybackLoopTask = RunAdvancementLoopAsync(guildId);
     }
 
     public async Task PauseAsync(ulong guildId)
@@ -139,9 +144,16 @@ public sealed partial class QueuePlaybackService(
         var currentItem = state.CurrentItem;
         state.CancelPlayback();
 
+        if (state.PlaybackLoopTask is { } loopTask)
+        {
+            state.PlaybackLoopTask = null;
+            await loopTask;
+        }
+
         if (currentItem is not null)
         {
             await queueRepository.InsertAtFrontAsync(guildId, currentItem);
+            state.ResumeItemId = currentItem.Id;
         }
 
         await PersistStateAsync(guildId, state);
@@ -398,7 +410,8 @@ public sealed partial class QueuePlaybackService(
         }
 
         var startFrom = state.ResumeItemId == item.Id ? state.ResumePosition : TimeSpan.Zero;
-        state.ResetResumeState();
+        state.ResumeItemId = item.Id;
+        state.ResumePosition = startFrom;
 
         using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(pauseToken, skipToken);
 
@@ -437,24 +450,13 @@ public sealed partial class QueuePlaybackService(
             var buffer = new byte[PcmBufferSize];
             long bytesWritten = 0;
 
-            try
+            int bytesRead;
+            while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, skipToken)) > 0)
             {
-                int bytesRead;
-                while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, skipToken)) > 0)
-                {
-                    await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), skipToken);
-                    bytesWritten += bytesRead;
-                }
-            }
-            finally
-            {
-                if (pauseToken.IsCancellationRequested)
-                {
-                    state.ResumePosition =
-                        startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
-                    state.ResumeItemId = item.Id;
-                    await PersistStateAsync(guildId, state);
-                }
+                await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), skipToken);
+                bytesWritten += bytesRead;
+                state.ResumePosition =
+                    startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
             }
         }
         catch (OperationCanceledException)
@@ -469,6 +471,7 @@ public sealed partial class QueuePlaybackService(
             throw;
         }
 
+        state.ResetResumeState();
         logger.LogInformation("Finished streaming '{Title}' in guild {GuildId}", item.Title, guildId);
     }
 
