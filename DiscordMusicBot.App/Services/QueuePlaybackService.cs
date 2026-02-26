@@ -57,8 +57,7 @@ public sealed partial class QueuePlaybackService(
         CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
-        var count = await queueRepository.GetCountAsync(guildId, cancellationToken);
-        var totalDurationMs = await queueRepository.GetTotalDurationMsAsync(guildId, cancellationToken);
+        var (count, totalDurationMs) = await queueRepository.GetCountAndTotalDurationMsAsync(guildId, cancellationToken);
 
         if (state.CurrentItem is not { } currentItem)
         {

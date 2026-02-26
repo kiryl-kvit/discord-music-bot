@@ -229,14 +229,17 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 cancellationToken: cancellationToken));
     }
 
-    public async Task<long> GetTotalDurationMsAsync(ulong guildId, CancellationToken cancellationToken = default)
+    public async Task<(int Count, long TotalDurationMs)> GetCountAndTotalDurationMsAsync(ulong guildId,
+        CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
 
-        return await connection.ExecuteScalarAsync<long>(
+        var row = await connection.QuerySingleAsync<(int Count, long TotalDurationMs)>(
             new CommandDefinition(
-                "SELECT COALESCE(SUM(duration_ms), 0) FROM play_queue_items WHERE guild_id = @GuildId",
+                "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM play_queue_items WHERE guild_id = @GuildId",
                 new { GuildId = guildId.ToString() },
                 cancellationToken: cancellationToken));
+
+        return row;
     }
 }
