@@ -1,16 +1,13 @@
 using System.Text.RegularExpressions;
 using DiscordMusicBot.Core.Constants;
-using DiscordMusicBot.Core.MusicSource.Options;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Suno;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DiscordMusicBot.Core.MusicSource.Processors;
 
 public sealed partial class SunoUrlProcessor(
     SunoMetadataClient metadataClient,
-    IOptionsMonitor<MusicSourcesOptions> options,
     ILogger<SunoUrlProcessor> logger)
     : IUrlProcessor
 {
@@ -68,8 +65,7 @@ public sealed partial class SunoUrlProcessor(
     {
         try
         {
-            var limit = options.CurrentValue.PlaylistLimit;
-            var tracks = await metadataClient.GetPlaylistTracksAsync(playlistId, limit, cancellationToken);
+            var tracks = await metadataClient.GetPlaylistTracksAsync(playlistId, cancellationToken);
 
             if (tracks.Count == 0)
             {

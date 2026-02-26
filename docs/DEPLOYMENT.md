@@ -104,7 +104,7 @@ Create a `.env` file in the same directory:
 BOT_TOKEN=your_bot_token
 APP_ID=your_application_id
 PUBLIC_KEY=your_public_key
-PLAYLIST_LIMIT=50
+PLAYLIST_LIMIT=50  # Set to 0 to disable the limit
 VOLUME=1.0
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret

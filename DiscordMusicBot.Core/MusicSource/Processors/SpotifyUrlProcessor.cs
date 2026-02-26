@@ -78,7 +78,6 @@ public sealed partial class SpotifyUrlProcessor(
         try
         {
             var client = spotifyClientProvider.GetClient();
-            var limit = options.CurrentValue.PlaylistLimit;
 
             var spotifyTracks = new List<SpotifyTrack>();
             var playlist = await client.Playlists.Get(playlistId, cancellationToken);
@@ -90,7 +89,7 @@ public sealed partial class SpotifyUrlProcessor(
 
             await foreach (var item in client.Paginate(playlist.Items, cancel: cancellationToken))
             {
-                if (spotifyTracks.Count >= limit)
+                if (options.CurrentValue.IsPlaylistLimitReached(spotifyTracks.Count))
                 {
                     break;
                 }
@@ -116,7 +115,6 @@ public sealed partial class SpotifyUrlProcessor(
         try
         {
             var client = spotifyClientProvider.GetClient();
-            var limit = options.CurrentValue.PlaylistLimit;
 
             var album = await client.Albums.Get(albumId, cancellationToken);
 
@@ -124,7 +122,7 @@ public sealed partial class SpotifyUrlProcessor(
 
             await foreach (var track in client.Paginate(album.Tracks, cancel: cancellationToken))
             {
-                if (spotifyTracks.Count >= limit)
+                if (options.CurrentValue.IsPlaylistLimitReached(spotifyTracks.Count))
                 {
                     break;
                 }
