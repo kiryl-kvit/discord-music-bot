@@ -4,6 +4,7 @@ using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.Favorites;
+using DiscordMusicBot.Domain.Playlists;
 using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.Logging;
 
@@ -14,9 +15,10 @@ public sealed class QueueModule(
     IUrlProcessorFactory urlProcessorFactory,
     QueuePlaybackService queuePlaybackService,
     IFavoriteRepository favoriteRepository,
+    IPlaylistRepository playlistRepository,
     ILogger<QueueModule> logger) : InteractionModuleBase
 {
-    [SlashCommand("add", "Enqueue an item or a favorite")]
+    [SlashCommand("add", "Enqueue an item, a favorite, or a playlist")]
     public async Task AddAsync([Autocomplete(typeof(QueueAddAutocompleteHandler))] string url)
     {
         var guildId = Context.Guild.Id;
@@ -31,68 +33,33 @@ public sealed class QueueModule(
             return;
         }
 
-        if (!SupportedSources.IsSupported(url))
+        if (url.StartsWith(PlaylistAutocompleteHelper.PlaylistPrefix, StringComparison.Ordinal))
         {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Unsupported Source",
-                    SupportedSources.GetSupportedSourcesMessage());
-            });
-            logger.LogInformation("User {UserId} provided unsupported source {Url} in guild {GuildId}", userId, url,
-                guildId);
+            await EnqueueFromPlaylistAsync(guildId, userId, url[PlaylistAutocompleteHelper.PlaylistPrefix.Length..]);
             return;
         }
 
-        var urlProcessor = urlProcessorFactory.GetProcessor(url);
-        var musicItemsResult = await urlProcessor.GetMusicItemsAsync(url);
-
-        if (!musicItemsResult.IsSuccess)
+        var queueItems = await ResolveUrlToQueueItemsAsync(guildId, userId, url);
+        if (queueItems is null)
         {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Failed to Process URL",
-                    musicItemsResult.ErrorMessage ?? "An unknown error occurred.");
-            });
             return;
         }
 
-        var queueItems = musicItemsResult.Value!.Items
-            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl)).ToArray();
-
-        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
-
-        logger.LogInformation("User {UserId} enqueued {Url} in guild {GuildId}", userId, url, guildId);
-
-        var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(queueItems);
-        await ModifyOriginalResponseAsync(props =>
-        {
-            props.Content = null;
-            props.Embed = embed;
-        });
+        await EnqueueAndRespondAsync(guildId, queueItems);
     }
 
     private async Task EnqueueFromFavoriteAsync(ulong guildId, ulong userId, string favoriteIdStr)
     {
         if (!long.TryParse(favoriteIdStr, out var favoriteId))
         {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Invalid Selection", "The favorite selection is invalid.");
-            });
+            await RespondWithDeferredErrorAsync("Invalid Selection", "The favorite selection is invalid.");
             return;
         }
 
         var favorite = await favoriteRepository.GetByIdAsync(favoriteId);
         if (favorite is null || favorite.UserId != userId)
         {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Not Found", "Favorite not found.");
-            });
+            await RespondWithDeferredErrorAsync("Not Found", "Favorite not found.");
             return;
         }
 
@@ -103,33 +70,13 @@ public sealed class QueueModule(
 
         if (favorite.IsPlaylist)
         {
-            if (!SupportedSources.IsSupported(favorite.Url))
+            var resolved = await ResolveUrlToQueueItemsAsync(guildId, userId, favorite.Url);
+            if (resolved is null)
             {
-                await ModifyOriginalResponseAsync(props =>
-                {
-                    props.Content = null;
-                    props.Embed = ErrorEmbedBuilder.Build("Unsupported Source",
-                        "The source for this favorite is no longer supported.");
-                });
                 return;
             }
 
-            var urlProcessor = urlProcessorFactory.GetProcessor(favorite.Url);
-            var musicItemsResult = await urlProcessor.GetMusicItemsAsync(favorite.Url);
-
-            if (!musicItemsResult.IsSuccess)
-            {
-                await ModifyOriginalResponseAsync(props =>
-                {
-                    props.Content = null;
-                    props.Embed = ErrorEmbedBuilder.Build("Failed to Resolve Playlist",
-                        musicItemsResult.ErrorMessage ?? "An unknown error occurred.");
-                });
-                return;
-            }
-
-            queueItems = musicItemsResult.Value!.Items
-                .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl)).ToArray();
+            queueItems = resolved;
         }
         else
         {
@@ -140,16 +87,87 @@ public sealed class QueueModule(
             ];
         }
 
-        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
+        await EnqueueAndRespondAsync(guildId, queueItems);
+    }
 
-        logger.LogInformation("User {UserId} enqueued favorite {FavoriteId} in guild {GuildId}",
-            userId, favoriteId, guildId);
+    private async Task EnqueueFromPlaylistAsync(ulong guildId, ulong userId, string playlistIdStr)
+    {
+        if (!long.TryParse(playlistIdStr, out var playlistId))
+        {
+            await RespondWithDeferredErrorAsync("Invalid Selection", "The playlist selection is invalid.");
+            return;
+        }
+
+        var playlist = await playlistRepository.GetByIdAsync(playlistId);
+        if (playlist is null || playlist.UserId != userId)
+        {
+            await RespondWithDeferredErrorAsync("Not Found", "Playlist not found.");
+            return;
+        }
+
+        logger.LogInformation("User {UserId} is enqueueing playlist {PlaylistId} ({Name}) in guild {GuildId}",
+            userId, playlistId, playlist.Name, guildId);
+
+        var playlistItems = await playlistRepository.GetAllItemsAsync(playlistId);
+
+        if (playlistItems.Count == 0)
+        {
+            await RespondWithDeferredErrorAsync("Empty Playlist", "This playlist has no tracks.");
+            return;
+        }
+
+        var queueItems = playlistItems
+            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author,
+                x.DurationMs.HasValue ? TimeSpan.FromMilliseconds(x.DurationMs.Value) : null, x.ThumbnailUrl))
+            .ToArray();
+
+        await EnqueueAndRespondAsync(guildId, queueItems);
+    }
+
+    private async Task<PlayQueueItem[]?> ResolveUrlToQueueItemsAsync(ulong guildId, ulong userId, string url)
+    {
+        if (!SupportedSources.IsSupported(url))
+        {
+            await RespondWithDeferredErrorAsync("Unsupported Source",
+                SupportedSources.GetSupportedSourcesMessage());
+            logger.LogInformation("User {UserId} provided unsupported source {Url} in guild {GuildId}",
+                userId, url, guildId);
+            return null;
+        }
+
+        var urlProcessor = urlProcessorFactory.GetProcessor(url);
+        var musicItemsResult = await urlProcessor.GetMusicItemsAsync(url);
+
+        if (!musicItemsResult.IsSuccess)
+        {
+            await RespondWithDeferredErrorAsync("Failed to Process URL",
+                musicItemsResult.ErrorMessage ?? "An unknown error occurred.");
+            return null;
+        }
+
+        return musicItemsResult.Value!.Items
+            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl))
+            .ToArray();
+    }
+
+    private async Task EnqueueAndRespondAsync(ulong guildId, PlayQueueItem[] queueItems)
+    {
+        await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);
 
         var embed = QueueEmbedBuilder.BuildAddedToQueueEmbed(queueItems);
         await ModifyOriginalResponseAsync(props =>
         {
             props.Content = null;
             props.Embed = embed;
+        });
+    }
+
+    private async Task RespondWithDeferredErrorAsync(string title, string description, string? guidance = null)
+    {
+        await ModifyOriginalResponseAsync(props =>
+        {
+            props.Content = null;
+            props.Embed = ErrorEmbedBuilder.Build(title, description, guidance);
         });
     }
 

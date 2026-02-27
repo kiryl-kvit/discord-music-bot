@@ -67,6 +67,11 @@ public static class ServicesConfiguration
                 .Validate(o => o.Limit >= 0, "Favorites:Limit must be 0 (unlimited) or a positive integer.")
                 .ValidateOnStart();
 
+            services.BindOptions<PlaylistsOptions>(configuration, PlaylistsOptions.SectionName)
+                .Validate(o => o.Limit >= 0, "Playlists:Limit must be 0 (unlimited) or a positive integer.")
+                .Validate(o => o.ItemLimit >= 0, "Playlists:ItemLimit must be 0 (unlimited) or a positive integer.")
+                .ValidateOnStart();
+
             return services;
         }
 
