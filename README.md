@@ -6,6 +6,8 @@ This app is NOT designed for high-demand multi-guild deployment. It is a simple 
 ## Features
 
 - **Favorites** -- save, list, rename, and remove favorite tracks per user
+- **Autoplay** -- when the queue ends, automatically plays related tracks from YouTube; toggle per server with `/queue autoplay`
+- **Playback history** -- browse recently played tracks per server and re-queue them with `/history play`
 - **State persistence** -- survives crashes and restarts by saving playback position, voice channel, and queue to a SQLite database, then auto-resuming where it left off
 - **Track prefetching** -- resolves the next track's audio stream while the current one is still playing for gapless transitions
 - **Hot-reload configuration** -- watches the `.env` file for changes and applies them without restarting the bot
@@ -40,6 +42,8 @@ Spotify resolves tracks to YouTube for audio playback. Suno streams audio direct
 | `SUNO_ENABLED` | No | `false` | Enable Suno source support |
 | `FAVORITES_LIMIT` | No | `100` | Max favorites per user (`0` = unlimited) |
 | `DATABASE_PATH` | No | `database.db` | Path to the SQLite database file |
+| `CLEANUP_RETENTION_DAYS` | No | `2` | Days to keep playback history records before cleanup |
+| `CLEANUP_INTERVAL_HOURS` | No | `12` | Hours between history cleanup runs |
 
 ## Third-Party Licenses
 
