@@ -22,7 +22,10 @@ public static class InfrastructureConfiguration
             .Bind(configuration.GetSection(DatabaseOptions.SectionName));
 
         services.AddOptions<DataCleanupOptions>()
-            .Bind(configuration.GetSection(DataCleanupOptions.SectionName));
+            .Bind(configuration.GetSection(DataCleanupOptions.SectionName))
+            .Validate(o => o.RetentionDays >= 1, "DataCleanup:RetentionDays must be at least 1.")
+            .Validate(o => o.IntervalHours > 0, "DataCleanup:IntervalHours must be greater than 0.")
+            .ValidateOnStart();
 
         services.AddSingleton<SqliteConnectionFactory>();
         services.AddSingleton<DatabaseMigrator>();
