@@ -27,8 +27,18 @@ public sealed class DatabaseMigrator(
             throw new InvalidOperationException("Database migration failed.", result.Error);
         }
 
-        var scriptsApplied = result.Scripts.Count();
-        logger.LogInformation("Database migrations completed successfully. {Count} script(s) applied",
-            scriptsApplied);
+        if (!result.Scripts.Any())
+        {
+            logger.LogInformation("Database is up to date. No migrations applied");
+            return;
+        }
+
+        foreach (var script in result.Scripts)
+        {
+            logger.LogInformation("Applied migration: {ScriptName}", script.Name);
+        }
+
+        logger.LogInformation("Database migrations completed successfully. {Count} migration(s) applied",
+            result.Scripts.Count());
     }
 }

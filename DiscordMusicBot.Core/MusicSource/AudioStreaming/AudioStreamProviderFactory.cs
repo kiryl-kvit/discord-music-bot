@@ -8,11 +8,11 @@ public sealed class AudioStreamProviderFactory(IServiceProvider serviceProvider)
 {
     public IAudioStreamProvider GetProvider(string url)
     {
-        if (!SupportedSources.TryGetSourceKey(url, out var key))
+        if (!SupportedSources.TryGetSourceType(url, out var sourceType))
         {
             throw new InvalidOperationException("No audio stream provider registered for the provided URL.");
         }
 
-        return serviceProvider.GetRequiredKeyedService<IAudioStreamProvider>(key);
+        return serviceProvider.GetRequiredKeyedService<IAudioStreamProvider>(sourceType);
     }
 }

@@ -26,16 +26,16 @@ public static partial class UrlNormalizer
             return null;
         }
 
-        if (!SupportedSources.TryGetSourceKey(url, out var key))
+        if (!SupportedSources.TryGetSourceType(url, out var sourceType))
         {
             return null;
         }
 
-        return key switch
+        return sourceType switch
         {
-            SupportedSources.YoutubeKey => NormalizeYoutube(url),
-            SupportedSources.SpotifyKey => NormalizeSpotify(url),
-            SupportedSources.SunoKey => NormalizeSuno(url),
+            SourceType.YouTube => NormalizeYoutube(url),
+            SourceType.Spotify => NormalizeSpotify(url),
+            SourceType.Suno => NormalizeSuno(url),
             _ => null,
         };
     }

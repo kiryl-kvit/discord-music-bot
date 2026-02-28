@@ -1,7 +1,7 @@
 using Discord;
 using Discord.Interactions;
 using DiscordMusicBot.App.Services;
-using DiscordMusicBot.Core.Constants;
+using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Search.Abstraction;
 using DiscordMusicBot.Domain.PlayQueue;
@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace DiscordMusicBot.App.Modules;
 
 public sealed class SearchModule(
-    [FromKeyedServices(SupportedSources.YoutubeKey)] ISearchProvider searchProvider,
+    [FromKeyedServices(SourceType.YouTube)] ISearchProvider searchProvider,
     IUrlProcessorFactory urlProcessorFactory,
     QueuePlaybackService queuePlaybackService,
     ILogger<SearchModule> logger) : InteractionModuleBase
@@ -75,7 +75,7 @@ public sealed class SearchModule(
         }
 
         var queueItems = musicItemsResult.Value!.Items
-            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl))
+            .Select(x => PlayQueueItem.Create(guildId, userId, x.SourceType, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl))
             .ToArray();
 
         await queuePlaybackService.EnqueueItemsAsync(guildId, queueItems, Context.Channel);

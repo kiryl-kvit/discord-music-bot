@@ -17,8 +17,8 @@ public sealed partial class SunoUrlProcessor(
     public async Task<Result<MusicSourceResult>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default)
     {
-        if (!SupportedSources.TryGetSourceKey(url, out var key) ||
-            !string.Equals(key, SupportedSources.SunoKey, StringComparison.OrdinalIgnoreCase))
+        if (!SupportedSources.TryGetSourceType(url, out var sourceType) ||
+            sourceType != SourceType.Suno)
         {
             return Result<MusicSourceResult>.Failure("Unsupported Suno URL.");
         }
@@ -89,7 +89,7 @@ public sealed partial class SunoUrlProcessor(
 
     private static MusicSource ToMusicSource(SunoTrack track)
     {
-        return new MusicSource(track.Title, track.SongUrl, track.Artist, Duration: null, track.ImageUrl);
+        return new MusicSource(SourceType.Suno, track.Title, track.SongUrl, track.Artist, Duration: null, track.ImageUrl);
     }
 
     private static bool TryParseSunoUrl(string url, out SunoResourceType resourceType, out string resourceId)
