@@ -124,6 +124,48 @@ public sealed class HistoryRepository(SqliteConnectionFactory connectionFactory)
         return row?.ToPlayQueueItem();
     }
 
+    public async Task<PlayQueueItem?> GetByIdAsync(ulong guildId, long id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+
+        var row = await connection.QueryFirstOrDefaultAsync<PlayQueueItemRow>(
+            new CommandDefinition(
+                """
+                SELECT id, guild_id, user_id, source_type, url, title, author, duration_ms, thumbnail_url, position, played_at
+                FROM play_queue_items
+                WHERE guild_id = @GuildId AND id = @Id AND played_at IS NOT NULL
+                LIMIT 1
+                """,
+                new { GuildId = guildId.ToString(), Id = id },
+                cancellationToken: cancellationToken));
+
+        return row?.ToPlayQueueItem();
+    }
+
+    public async Task<IReadOnlyList<PlayQueueItem>> SearchAsync(ulong guildId, string query, int limit,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+
+        var pattern = $"%{query}%";
+
+        var rows = await connection.QueryAsync<PlayQueueItemRow>(
+            new CommandDefinition(
+                """
+                SELECT id, guild_id, user_id, source_type, url, title, author, duration_ms, thumbnail_url, position, played_at
+                FROM play_queue_items
+                WHERE guild_id = @GuildId AND played_at IS NOT NULL
+                  AND (title LIKE @Pattern OR author LIKE @Pattern)
+                ORDER BY played_at DESC
+                LIMIT @Limit
+                """,
+                new { GuildId = guildId.ToString(), Pattern = pattern, Limit = limit },
+                cancellationToken: cancellationToken));
+
+        return rows.Select(r => r.ToPlayQueueItem()).ToArray();
+    }
+
     public async Task TrimAsync(ulong guildId, int keepCount,
         CancellationToken cancellationToken = default)
     {

@@ -44,7 +44,7 @@ public sealed class HelpModule : InteractionModuleBase
                 "`/search <query>` — Search YouTube and pick a track or playlist to enqueue")
             .AddField("History",
                 "`/history list [page]` — Show recently played tracks\n" +
-                "`/history play <position>` — Re-add a track from history to the queue")
+                "`/history play <track>` — Search and re-add a track from history to the queue")
             .AddField("Other",
                 "`/now` — Show the currently playing track\n" +
                 "`/help` — Show this help message")

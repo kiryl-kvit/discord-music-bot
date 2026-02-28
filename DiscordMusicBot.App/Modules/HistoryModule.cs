@@ -1,4 +1,5 @@
 using Discord.Interactions;
+using DiscordMusicBot.App.Modules.Autocomplete;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Domain.History;
 using DiscordMusicBot.Domain.PlayQueue;
@@ -31,27 +32,36 @@ public sealed class HistoryModule(
     }
 
     [SlashCommand("play", "Re-add a track from history to the queue")]
-    public async Task PlayAsync([MinValue(1)] int position)
+    public async Task PlayAsync(
+        [Summary("track"), Autocomplete(typeof(HistoryAutocompleteHandler))] string track)
     {
         var guildId = Context.Guild.Id;
         var userId = Context.User.Id;
 
         await DeferAsync(ephemeral: true);
 
-        var index = position - 1;
-        var items = await historyRepository.GetPageAsync(guildId, index, 1);
-
-        if (items.Count == 0)
+        if (!long.TryParse(track, out var trackId))
         {
             await ModifyOriginalResponseAsync(props =>
             {
-                props.Embed = ErrorEmbedBuilder.Build("Not Found",
-                    $"No track at position {position} in history.");
+                props.Embed = ErrorEmbedBuilder.Build("Invalid Selection",
+                    "Please select a track from the autocomplete suggestions.");
             });
             return;
         }
 
-        var historyItem = items[0];
+        var historyItem = await historyRepository.GetByIdAsync(guildId, trackId);
+
+        if (historyItem is null)
+        {
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Embed = ErrorEmbedBuilder.Build("Not Found",
+                    "This track is no longer in the history.");
+            });
+            return;
+        }
+
         var queueItem = PlayQueueItem.Create(guildId, userId, historyItem.SourceType, historyItem.Url, historyItem.Title,
             historyItem.Author, historyItem.Duration, historyItem.ThumbnailUrl);
 
