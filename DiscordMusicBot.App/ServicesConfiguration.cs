@@ -117,6 +117,7 @@ public static class ServicesConfiguration
             services.AddSingleton<QueuePlaybackService>();
 
             services.AddHostedService<BotHostedService>();
+            services.AddHostedService<DataCleanupService>();
 
             return services;
         }

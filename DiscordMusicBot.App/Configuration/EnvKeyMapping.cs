@@ -15,5 +15,7 @@ public static class EnvKeyMapping
             ["SUNO_ENABLED"] = "Suno:Enabled",
             ["DATABASE_PATH"] = "Database:Path",
             ["FAVORITES_LIMIT"] = "Favorites:Limit",
+            ["CLEANUP_RETENTION_DAYS"] = "DataCleanup:RetentionDays",
+            ["CLEANUP_INTERVAL_HOURS"] = "DataCleanup:IntervalHours",
         };
 }

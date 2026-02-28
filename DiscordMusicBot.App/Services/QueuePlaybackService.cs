@@ -29,7 +29,6 @@ public sealed partial class QueuePlaybackService(
 {
     private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
     private const int PcmBytesPerSecond = 192000; // 48kHz * 16-bit * 2 channels.
-    private const int HistoryKeepCount = 100;
     private const int AutoplayExcludeCount = 50;
 
     private readonly ConcurrentDictionary<ulong, GuildPlaybackState> _states = new();
@@ -444,7 +443,6 @@ public sealed partial class QueuePlaybackService(
                 }
 
                 await queueRepository.MarkAsPlayedAsync(item.Id, pauseToken);
-                _ = TrimHistoryAsync(guildId);
             }
         }
         catch (OperationCanceledException)
@@ -534,18 +532,6 @@ public sealed partial class QueuePlaybackService(
         {
             logger.LogWarning(ex, "Autoplay failed in guild {GuildId}", guildId);
             return false;
-        }
-    }
-
-    private async Task TrimHistoryAsync(ulong guildId)
-    {
-        try
-        {
-            await historyRepository.TrimAsync(guildId, HistoryKeepCount);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to trim history for guild {GuildId}", guildId);
         }
     }
 

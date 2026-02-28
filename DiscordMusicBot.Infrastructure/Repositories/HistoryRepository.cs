@@ -166,24 +166,18 @@ public sealed class HistoryRepository(SqliteConnectionFactory connectionFactory)
         return rows.Select(r => r.ToPlayQueueItem()).ToArray();
     }
 
-    public async Task TrimAsync(ulong guildId, int keepCount,
+    public async Task<int> DeleteOlderThanAsync(DateTime cutoff,
         CancellationToken cancellationToken = default)
     {
         await using var connection = connectionFactory.CreateConnection();
 
-        await connection.ExecuteAsync(
+        return await connection.ExecuteAsync(
             new CommandDefinition(
                 """
                 DELETE FROM play_queue_items
-                WHERE guild_id = @GuildId AND played_at IS NOT NULL
-                  AND id NOT IN (
-                      SELECT id FROM play_queue_items
-                      WHERE guild_id = @GuildId AND played_at IS NOT NULL
-                      ORDER BY played_at DESC
-                      LIMIT @KeepCount
-                  )
+                WHERE played_at IS NOT NULL AND datetime(played_at) < datetime(@Cutoff)
                 """,
-                new { GuildId = guildId.ToString(), KeepCount = keepCount },
+                new { Cutoff = cutoff.ToString("yyyy-MM-dd HH:mm:ss") },
                 cancellationToken: cancellationToken));
     }
 }
