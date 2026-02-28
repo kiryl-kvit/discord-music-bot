@@ -193,7 +193,7 @@ public static class QueueEmbedBuilder
     {
         return new EmbedBuilder()
             .WithTitle("Autoplay")
-            .WithColor(Color.Purple)
+            .WithColor(Color.Teal)
             .WithDescription($"**{title}** - {author ?? DisplayConstants.UnknownAuthor}")
             .WithFooter("Playing a related track because the queue is empty")
             .Build();
