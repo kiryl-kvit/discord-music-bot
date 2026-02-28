@@ -21,8 +21,8 @@ public sealed class YoutubeUrlProcessor(
     public async Task<Result<MusicSourceResult>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default)
     {
-        if (!SupportedSources.TryGetSourceKey(url, out var key) ||
-            !string.Equals(key, SupportedSources.YoutubeKey, StringComparison.OrdinalIgnoreCase))
+        if (!SupportedSources.TryGetSourceType(url, out var sourceType) ||
+            sourceType != SourceType.YouTube)
         {
             return Result<MusicSourceResult>.Failure("Unsupported YouTube URL.");
         }
@@ -116,7 +116,7 @@ public sealed class YoutubeUrlProcessor(
         var url = YoutubeHelpers.VideoUrl(video.Id);
         var author = video.Author?.ChannelTitle;
         var thumbnailUrl = GetThumbnailUrl(video.Thumbnails);
-        return new MusicSource(video.Title, url, author, video.Duration, thumbnailUrl);
+        return new MusicSource(SourceType.YouTube, video.Title, url, author, video.Duration, thumbnailUrl);
     }
 
     private static string? GetThumbnailUrl(IReadOnlyList<Thumbnail> thumbnails)

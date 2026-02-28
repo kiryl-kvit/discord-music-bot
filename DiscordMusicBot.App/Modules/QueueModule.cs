@@ -6,6 +6,7 @@ using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.Favorites;
 using DiscordMusicBot.Domain.Playlists;
 using DiscordMusicBot.Domain.PlayQueue;
+using DiscordMusicBot.Domain.Settings;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Modules;
@@ -16,6 +17,7 @@ public sealed class QueueModule(
     QueuePlaybackService queuePlaybackService,
     IFavoriteRepository favoriteRepository,
     IPlaylistRepository playlistRepository,
+    IGuildSettingsRepository guildSettingsRepository,
     ILogger<QueueModule> logger) : InteractionModuleBase
 {
     [SlashCommand("add", "Enqueue an item, a favorite, or a playlist")]
@@ -80,9 +82,10 @@ public sealed class QueueModule(
         }
         else
         {
+            SupportedSources.TryGetSourceType(favorite.Url, out var favoriteSourceType);
             queueItems =
             [
-                PlayQueueItem.Create(guildId, userId, favorite.Url, favorite.Title,
+                PlayQueueItem.Create(guildId, userId, favoriteSourceType, favorite.Url, favorite.Title,
                     favorite.Author, favorite.Duration, favorite.ThumbnailUrl)
             ];
         }
@@ -117,8 +120,12 @@ public sealed class QueueModule(
         }
 
         var queueItems = playlistItems
-            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author,
-                x.DurationMs.HasValue ? TimeSpan.FromMilliseconds(x.DurationMs.Value) : null, x.ThumbnailUrl))
+            .Select(x =>
+            {
+                SupportedSources.TryGetSourceType(x.Url, out var itemSourceType);
+                return PlayQueueItem.Create(guildId, userId, itemSourceType, x.Url, x.Title, x.Author,
+                    x.DurationMs.HasValue ? TimeSpan.FromMilliseconds(x.DurationMs.Value) : null, x.ThumbnailUrl);
+            })
             .ToArray();
 
         await EnqueueAndRespondAsync(guildId, queueItems);
@@ -146,7 +153,7 @@ public sealed class QueueModule(
         }
 
         return musicItemsResult.Value!.Items
-            .Select(x => PlayQueueItem.Create(guildId, userId, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl))
+            .Select(x => PlayQueueItem.Create(guildId, userId, x.SourceType, x.Url, x.Title, x.Author, x.Duration, x.ThumbnailUrl))
             .ToArray();
     }
 
@@ -297,12 +304,31 @@ public sealed class QueueModule(
         var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize + 1);
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
         var stats = await queuePlaybackService.GetQueueStatsAsync(guildId);
+        var settings = await guildSettingsRepository.GetAsync(guildId);
         var hasNextPage = items.Count > pageSize;
         var pageItems = hasNextPage ? items.Take(pageSize).ToList() : items;
 
-        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize, stats);
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize, stats,
+            settings is { AutoplayEnabled: true });
         var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage);
 
         await RespondAsync(embed: embed, components: components);
+    }
+
+    [SlashCommand("autoplay", "Toggle autoplay mode")]
+    public async Task AutoplayAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        var settings = await guildSettingsRepository.GetAsync(guildId);
+        var newState = settings is not { AutoplayEnabled: true };
+
+        await guildSettingsRepository.SetAutoplayAsync(guildId, newState);
+
+        logger.LogInformation("User {UserId} toggled autoplay to {State} in guild {GuildId}",
+            Context.User.Id, newState, guildId);
+
+        var embed = QueueEmbedBuilder.BuildAutoplayToggledEmbed(newState);
+        await RespondAsync(embed: embed);
     }
 }

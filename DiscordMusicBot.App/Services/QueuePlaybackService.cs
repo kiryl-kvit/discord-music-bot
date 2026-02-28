@@ -4,10 +4,14 @@ using Discord.Audio;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Services.Models;
 using DiscordMusicBot.Core;
+using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
+using DiscordMusicBot.Core.MusicSource.Related;
+using DiscordMusicBot.Domain.History;
 using DiscordMusicBot.Domain.Playback;
 using DiscordMusicBot.Domain.PlayQueue;
+using DiscordMusicBot.Domain.Settings;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Services;
@@ -17,11 +21,16 @@ public sealed partial class QueuePlaybackService(
     VoiceConnectionService voiceConnectionService,
     IPlayQueueRepository queueRepository,
     IGuildPlaybackStateRepository stateRepository,
+    IHistoryRepository historyRepository,
+    IGuildSettingsRepository guildSettingsRepository,
+    IRelatedTrackProvider relatedTrackProvider,
     DiscordSocketClient discordClient,
     ILogger<QueuePlaybackService> logger)
 {
     private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
     private const int PcmBytesPerSecond = 192000; // 48kHz * 16-bit * 2 channels.
+    private const int HistoryKeepCount = 100;
+    private const int AutoplayExcludeCount = 50;
 
     private readonly ConcurrentDictionary<ulong, GuildPlaybackState> _states = new();
 
@@ -375,6 +384,11 @@ public sealed partial class QueuePlaybackService(
 
                 if (item is null)
                 {
+                    if (await TryAutoplayNextAsync(guildId, pauseToken))
+                    {
+                        continue;
+                    }
+
                     logger.LogInformation("Queue is empty in guild {GuildId}. Auto-stopping playback.", guildId);
                     await FullStopAsync(guildId, pauseToken);
                     break;
@@ -393,7 +407,7 @@ public sealed partial class QueuePlaybackService(
                         $"Skipping '{item.Title}'",
                         "Track has an invalid duration.",
                         pauseToken);
-                    await queueRepository.DeleteByIdAsync(guildId, item.Id, pauseToken);
+                    await queueRepository.MarkAsPlayedAsync(item.Id, pauseToken);
                     continue;
                 }
 
@@ -428,7 +442,8 @@ public sealed partial class QueuePlaybackService(
                     state.SkipCts = null;
                 }
 
-                await queueRepository.DeleteByIdAsync(guildId, item.Id, pauseToken);
+                await queueRepository.MarkAsPlayedAsync(item.Id, pauseToken);
+                _ = TrimHistoryAsync(guildId);
             }
         }
         catch (OperationCanceledException)
@@ -445,6 +460,111 @@ public sealed partial class QueuePlaybackService(
                 "Playback stopped unexpectedly",
                 "An unexpected error interrupted playback. Use `/queue resume` to restart.",
                 CancellationToken.None);
+        }
+    }
+
+    private async Task<bool> TryAutoplayNextAsync(ulong guildId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var settings = await guildSettingsRepository.GetAsync(guildId, cancellationToken);
+            if (settings is not { AutoplayEnabled: true })
+            {
+                return false;
+            }
+
+            var lastPlayed = await historyRepository.GetLastPlayedAsync(guildId, cancellationToken);
+            if (lastPlayed is null)
+            {
+                logger.LogInformation("Autoplay enabled but no history in guild {GuildId}", guildId);
+                return false;
+            }
+
+            SourceType[] autoplaySourceTypes = [SourceType.YouTube, SourceType.Spotify];
+            var seedUrl = lastPlayed.Url;
+
+            if (!autoplaySourceTypes.Contains(lastPlayed.SourceType))
+            {
+                logger.LogInformation(
+                    "Last played track is {SourceType} in guild {GuildId}, searching history for a YouTube/Spotify track",
+                    lastPlayed.SourceType, guildId);
+
+                var compatibleItem =
+                    await historyRepository.GetLastPlayedBySourceTypesAsync(guildId, autoplaySourceTypes, cancellationToken);
+                if (compatibleItem is null)
+                {
+                    logger.LogInformation("No YouTube/Spotify track found in history for autoplay in guild {GuildId}",
+                        guildId);
+                    return false;
+                }
+
+                seedUrl = compatibleItem.Url;
+            }
+
+            var excludeUrls =
+                await historyRepository.GetRecentUrlsAsync(guildId, AutoplayExcludeCount, cancellationToken);
+
+            var related = await relatedTrackProvider.GetRelatedTrackAsync(seedUrl, excludeUrls, cancellationToken);
+            if (related is null)
+            {
+                logger.LogInformation("No related track found for autoplay in guild {GuildId}", guildId);
+                return false;
+            }
+
+            var queueItem = PlayQueueItem.Create(
+                guildId, 0, related.SourceType, related.Url, related.Title, related.Author, related.Duration, related.ThumbnailUrl);
+
+            await queueRepository.AddItemsAsync(guildId, [queueItem], cancellationToken);
+
+            logger.LogInformation("Autoplay enqueued '{Title}' by {Author} in guild {GuildId}",
+                related.Title, related.Author ?? "Unknown", guildId);
+
+            await SendAutoplayFeedbackAsync(guildId, related.Title, related.Author, cancellationToken);
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Autoplay failed in guild {GuildId}", guildId);
+            return false;
+        }
+    }
+
+    private async Task TrimHistoryAsync(ulong guildId)
+    {
+        try
+        {
+            await historyRepository.TrimAsync(guildId, HistoryKeepCount);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to trim history for guild {GuildId}", guildId);
+        }
+    }
+
+    private async Task SendAutoplayFeedbackAsync(ulong guildId, string title, string? author,
+        CancellationToken cancellationToken)
+    {
+        var channel = GetState(guildId).FeedbackChannel;
+        if (channel is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var embed = QueueEmbedBuilder.BuildAutoplayEmbed(title, author);
+
+            await channel.SendMessageAsync(embed: embed,
+                options: new RequestOptions { CancelToken = cancellationToken });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send autoplay feedback in guild {GuildId}", guildId);
         }
     }
 

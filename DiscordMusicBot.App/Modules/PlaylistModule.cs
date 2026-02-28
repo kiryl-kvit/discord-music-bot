@@ -3,7 +3,6 @@ using DiscordMusicBot.App.Modules.Autocomplete;
 using DiscordMusicBot.App.Options;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Domain.Playlists;
-using DiscordMusicBot.Domain.PlayQueue;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

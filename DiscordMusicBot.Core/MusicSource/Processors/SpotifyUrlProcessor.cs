@@ -26,8 +26,8 @@ public sealed partial class SpotifyUrlProcessor(
     public async Task<Result<MusicSourceResult>> GetMusicItemsAsync(string url,
         CancellationToken cancellationToken = default)
     {
-        if (!SupportedSources.TryGetSourceKey(url, out var key) ||
-            !string.Equals(key, SupportedSources.SpotifyKey, StringComparison.OrdinalIgnoreCase))
+        if (!SupportedSources.TryGetSourceType(url, out var sourceType) ||
+            sourceType != SourceType.Spotify)
         {
             return Result<MusicSourceResult>.Failure("Unsupported Spotify URL.");
         }
@@ -193,7 +193,7 @@ public sealed partial class SpotifyUrlProcessor(
 
             var youtubeUrl = YoutubeHelpers.VideoUrl(firstResult.Id);
 
-            return new MusicSource(spotifyTrack.Title, youtubeUrl, spotifyTrack.Artist, spotifyTrack.Duration,
+            return new MusicSource(SourceType.Spotify, spotifyTrack.Title, youtubeUrl, spotifyTrack.Artist, spotifyTrack.Duration,
                 spotifyTrack.ImageUrl);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

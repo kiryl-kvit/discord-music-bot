@@ -10,7 +10,7 @@ public static class QueueEmbedBuilder
     public const int PageSize = 10;
 
     public static Embed BuildQueueEmbed(IReadOnlyCollection<PlayQueueItem> items, PlayQueueItem? currentItem,
-        int page, int pageSize, QueueStats stats)
+        int page, int pageSize, QueueStats stats, bool autoplayEnabled)
     {
         var builder = new EmbedBuilder()
             .WithTitle("Queue")
@@ -34,7 +34,8 @@ public static class QueueEmbedBuilder
 
         var totalPages = stats.Count == 0 ? 1 : (int)Math.Ceiling((double)stats.Count / pageSize);
         var durationText = DateFormatter.FormatTime(stats.TotalDuration);
-        builder.WithFooter($"Page {page}/{totalPages}  |  {stats.Count} tracks  |  {durationText} total");
+        var autoplayText = autoplayEnabled ? "on" : "off";
+        builder.WithFooter($"Page {page}/{totalPages}  |  {stats.Count} tracks  |  {durationText} total  |  Autoplay: {autoplayText}");
 
         return builder.Build();
     }
@@ -186,5 +187,26 @@ public static class QueueEmbedBuilder
         }
 
         return builder.Build();
+    }
+
+    public static Embed BuildAutoplayEmbed(string title, string? author)
+    {
+        return new EmbedBuilder()
+            .WithTitle("Autoplay")
+            .WithColor(Color.Purple)
+            .WithDescription($"**{title}** - {author ?? DisplayConstants.UnknownAuthor}")
+            .WithFooter("Playing a related track because the queue is empty")
+            .Build();
+    }
+
+    public static Embed BuildAutoplayToggledEmbed(bool enabled)
+    {
+        return new EmbedBuilder()
+            .WithTitle("Autoplay")
+            .WithColor(enabled ? Color.Green : Color.LightGrey)
+            .WithDescription(enabled
+                ? "Autoplay is now **enabled**. Related tracks will play when the queue is empty."
+                : "Autoplay is now **disabled**.")
+            .Build();
     }
 }

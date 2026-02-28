@@ -22,7 +22,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
 
         var maxPosition = await connection.ExecuteScalarAsync<int?>(
             new CommandDefinition(
-                "SELECT MAX(position) FROM play_queue_items WHERE guild_id = @GuildId",
+                "SELECT MAX(position) FROM play_queue_items WHERE guild_id = @GuildId AND played_at IS NULL",
                 new { GuildId = guildId.ToString() },
                 transaction: transaction,
                 cancellationToken: cancellationToken));
@@ -31,7 +31,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         var guildIdStr = guildId.ToString();
 
         var sb = new StringBuilder();
-        sb.Append("INSERT INTO play_queue_items (guild_id, user_id, url, title, author, duration_ms, thumbnail_url, position) VALUES ");
+        sb.Append("INSERT INTO play_queue_items (guild_id, user_id, source_type, url, title, author, duration_ms, thumbnail_url, position) VALUES ");
 
         var parameters = new DynamicParameters();
         parameters.Add("GuildId", guildIdStr);
@@ -43,10 +43,11 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 sb.Append(", ");
             }
 
-            sb.Append($"(@GuildId, @UserId{i}, @Url{i}, @Title{i}, @Author{i}, @DurationMs{i}, @ThumbnailUrl{i}, @Position{i})");
+            sb.Append($"(@GuildId, @UserId{i}, @SourceType{i}, @Url{i}, @Title{i}, @Author{i}, @DurationMs{i}, @ThumbnailUrl{i}, @Position{i})");
 
             var item = items[i];
             parameters.Add($"UserId{i}", item.UserId.ToString());
+            parameters.Add($"SourceType{i}", item.SourceType.ToString());
             parameters.Add($"Url{i}", item.Url);
             parameters.Add($"Title{i}", item.Title);
             parameters.Add($"Author{i}", item.Author);
@@ -77,9 +78,9 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         var row = await connection.QueryFirstOrDefaultAsync<PlayQueueItemRow>(
             new CommandDefinition(
                 """
-                SELECT id, guild_id, user_id, url, title, author, duration_ms, thumbnail_url, position
+                SELECT id, guild_id, user_id, source_type, url, title, author, duration_ms, thumbnail_url, position
                 FROM play_queue_items
-                WHERE guild_id = @GuildId
+                WHERE guild_id = @GuildId AND played_at IS NULL
                 ORDER BY position
                 LIMIT 1 OFFSET @Skip
                 """,
@@ -112,7 +113,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
                 DELETE FROM play_queue_items
                 WHERE id IN (
                     SELECT id FROM play_queue_items
-                    WHERE guild_id = @GuildId AND (@ExcludeId IS NULL OR id != @ExcludeId)
+                    WHERE guild_id = @GuildId AND played_at IS NULL AND (@ExcludeId IS NULL OR id != @ExcludeId)
                     ORDER BY position
                     LIMIT @Count
                 )
@@ -133,7 +134,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             new CommandDefinition(
                 """
                 SELECT id FROM play_queue_items
-                WHERE guild_id = @GuildId AND (@ExcludeId IS NULL OR id != @ExcludeId)
+                WHERE guild_id = @GuildId AND played_at IS NULL AND (@ExcludeId IS NULL OR id != @ExcludeId)
                 ORDER BY position
                 """,
                 new { GuildId = guildId.ToString(), ExcludeId = excludeItemId },
@@ -193,7 +194,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
 
         await connection.ExecuteAsync(
             new CommandDefinition(
-                "DELETE FROM play_queue_items WHERE guild_id = @GuildId",
+                "DELETE FROM play_queue_items WHERE guild_id = @GuildId AND played_at IS NULL",
                 new { GuildId = guildId.ToString() },
                 cancellationToken: cancellationToken));
     }
@@ -206,9 +207,9 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
         var rows = await connection.QueryAsync<PlayQueueItemRow>(
             new CommandDefinition(
                 """
-                SELECT id, guild_id, user_id, url, title, author, duration_ms, thumbnail_url, position
+                SELECT id, guild_id, user_id, source_type, url, title, author, duration_ms, thumbnail_url, position
                 FROM play_queue_items
-                WHERE guild_id = @GuildId
+                WHERE guild_id = @GuildId AND played_at IS NULL
                 ORDER BY position
                 LIMIT @Take OFFSET @Skip
                 """,
@@ -224,7 +225,7 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
 
         return await connection.ExecuteScalarAsync<int>(
             new CommandDefinition(
-                "SELECT COUNT(*) FROM play_queue_items WHERE guild_id = @GuildId",
+                "SELECT COUNT(*) FROM play_queue_items WHERE guild_id = @GuildId AND played_at IS NULL",
                 new { GuildId = guildId.ToString() },
                 cancellationToken: cancellationToken));
     }
@@ -236,10 +237,22 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
 
         var row = await connection.QuerySingleAsync<(int Count, long TotalDurationMs)>(
             new CommandDefinition(
-                "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM play_queue_items WHERE guild_id = @GuildId",
+                "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM play_queue_items WHERE guild_id = @GuildId AND played_at IS NULL",
                 new { GuildId = guildId.ToString() },
                 cancellationToken: cancellationToken));
 
         return row;
+    }
+
+    public async Task MarkAsPlayedAsync(long itemId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE play_queue_items SET played_at = datetime('now') WHERE id = @Id",
+                new { Id = itemId },
+                cancellationToken: cancellationToken));
     }
 }

@@ -4,6 +4,7 @@ using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
 using DiscordMusicBot.App.Services;
 using DiscordMusicBot.Core.Constants;
+using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.Options;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming.Abstraction;
@@ -11,6 +12,7 @@ using DiscordMusicBot.Core.MusicSource.Processors;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Search;
 using DiscordMusicBot.Core.MusicSource.Search.Abstraction;
+using DiscordMusicBot.Core.MusicSource.Related;
 using DiscordMusicBot.Core.MusicSource.Spotify;
 using DiscordMusicBot.Core.MusicSource.Suno;
 using Microsoft.Extensions.Configuration;
@@ -31,13 +33,15 @@ public static class ServicesConfiguration
 
         services.AddInfrastructure(configuration);
 
-        services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SupportedSources.YoutubeKey);
+        services.AddKeyedScoped<IUrlProcessor, YoutubeUrlProcessor>(SourceType.YouTube);
         services.AddScoped<IUrlProcessorFactory, UrlProcessorFactory>();
         services.AddSingleton<YoutubeClient>();
 
-        services.AddKeyedScoped<ISearchProvider, YoutubeSearchProvider>(SupportedSources.YoutubeKey);
+        services.AddKeyedScoped<ISearchProvider, YoutubeSearchProvider>(SourceType.YouTube);
 
-        services.AddKeyedSingleton<IAudioStreamProvider, YoutubeAudioStreamProvider>(SupportedSources.YoutubeKey);
+        services.AddSingleton<IRelatedTrackProvider, YoutubeRelatedTrackProvider>();
+
+        services.AddKeyedSingleton<IAudioStreamProvider, YoutubeAudioStreamProvider>(SourceType.YouTube);
         services.AddSingleton<FfmpegAudioPipeline>();
         services.AddSingleton<IAudioStreamProviderFactory, AudioStreamProviderFactory>();
 
@@ -146,7 +150,7 @@ public static class ServicesConfiguration
                     "Provide both ClientId and ClientSecret, or remove both to disable Spotify.");
             }
 
-            SupportedSources.Register(SupportedSources.SpotifyKey);
+            SupportedSources.Register(SourceType.Spotify);
 
             services.BindOptions<SpotifyOptions>(configuration, SpotifyOptions.SectionName)
                 .Validate(o => !string.IsNullOrWhiteSpace(o.ClientId), "Spotify:ClientId is required.")
@@ -154,7 +158,7 @@ public static class ServicesConfiguration
                 .ValidateOnStart();
 
             services.AddSingleton<SpotifyClientProvider>();
-            services.AddKeyedScoped<IUrlProcessor, SpotifyUrlProcessor>(SupportedSources.SpotifyKey);
+            services.AddKeyedScoped<IUrlProcessor, SpotifyUrlProcessor>(SourceType.Spotify);
 
             return services;
         }
@@ -169,7 +173,7 @@ public static class ServicesConfiguration
                 return services;
             }
 
-            SupportedSources.Register(SupportedSources.SunoKey);
+            SupportedSources.Register(SourceType.Suno);
 
             services.BindOptions<SunoOptions>(configuration, SunoOptions.SectionName);
 
@@ -179,8 +183,8 @@ public static class ServicesConfiguration
                     "Mozilla/5.0 (compatible; DiscordMusicBot/1.0)");
             });
 
-            services.AddKeyedScoped<IUrlProcessor, SunoUrlProcessor>(SupportedSources.SunoKey);
-            services.AddKeyedSingleton<IAudioStreamProvider, SunoAudioStreamProvider>(SupportedSources.SunoKey);
+            services.AddKeyedScoped<IUrlProcessor, SunoUrlProcessor>(SourceType.Suno);
+            services.AddKeyedSingleton<IAudioStreamProvider, SunoAudioStreamProvider>(SourceType.Suno);
 
             return services;
         }

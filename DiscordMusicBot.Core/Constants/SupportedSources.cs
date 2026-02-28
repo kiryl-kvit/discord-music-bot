@@ -1,41 +1,39 @@
+using DiscordMusicBot.Core.MusicSource;
+
 namespace DiscordMusicBot.Core.Constants;
 
 public static class SupportedSources
 {
-    public const string YoutubeKey = "youtube";
-    public const string SpotifyKey = "spotify";
-    public const string SunoKey = "suno";
+    private sealed record SourceDefinition(SourceType SourceType, string Name, string[] Hosts, string[] ExampleHosts);
 
-    private sealed record SourceDefinition(string Key, string Name, string[] Hosts, string[] ExampleHosts);
-
-    private static readonly Dictionary<string, SourceDefinition> AllSources = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<SourceType, SourceDefinition> AllSources = new()
     {
-        [YoutubeKey] = new SourceDefinition(Key: YoutubeKey,
+        [SourceType.YouTube] = new SourceDefinition(SourceType: SourceType.YouTube,
             Name: "YouTube",
             Hosts: ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"],
             ExampleHosts: ["youtube.com", "music.youtube.com", "youtu.be"]),
 
-        [SpotifyKey] = new SourceDefinition(Key: SpotifyKey,
+        [SourceType.Spotify] = new SourceDefinition(SourceType: SourceType.Spotify,
             Name: "Spotify",
             Hosts: ["open.spotify.com"],
             ExampleHosts: ["open.spotify.com"]),
 
-        [SunoKey] = new SourceDefinition(Key: SunoKey,
+        [SourceType.Suno] = new SourceDefinition(SourceType: SourceType.Suno,
             Name: "Suno",
             Hosts: ["suno.com", "www.suno.com"],
             ExampleHosts: ["suno.com"]),
     };
 
-    private static readonly List<SourceDefinition> ActiveSources = [AllSources[YoutubeKey]];
+    private static readonly List<SourceDefinition> ActiveSources = [AllSources[SourceType.YouTube]];
 
-    public static void Register(string key)
+    public static void Register(SourceType sourceType)
     {
-        if (!AllSources.TryGetValue(key, out var source))
+        if (!AllSources.TryGetValue(sourceType, out var source))
         {
-            throw new ArgumentException($"Unknown source key '{key}'.", nameof(key));
+            throw new ArgumentException($"Unknown source type '{sourceType}'.", nameof(sourceType));
         }
 
-        if (ActiveSources.Any(s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase)))
+        if (ActiveSources.Any(s => s.SourceType == sourceType))
         {
             return;
         }
@@ -45,12 +43,12 @@ public static class SupportedSources
 
     public static bool IsSupported(string url)
     {
-        return TryGetSourceKey(url, out _);
+        return TryGetSourceType(url, out _);
     }
 
-    public static bool TryGetSourceKey(string url, out string key)
+    public static bool TryGetSourceType(string url, out SourceType sourceType)
     {
-        key = string.Empty;
+        sourceType = default;
 
         if (!TryCreateSupportedUri(url, out var uri))
         {
@@ -60,7 +58,7 @@ public static class SupportedSources
         foreach (var source in ActiveSources.Where(source =>
                      source.Hosts.Any(host => string.Equals(uri?.Host, host, StringComparison.OrdinalIgnoreCase))))
         {
-            key = source.Key;
+            sourceType = source.SourceType;
             return true;
         }
 

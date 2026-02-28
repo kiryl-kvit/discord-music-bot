@@ -33,7 +33,8 @@ public sealed class HelpModule : InteractionModuleBase
                 "`/queue pause` — Pause playback\n" +
                 "`/queue skip [count]` — Skip one or more tracks\n" +
                 "`/queue shuffle` — Shuffle the queue\n" +
-                "`/queue clear` — Clear all items from the queue")
+                "`/queue clear` — Clear all items from the queue\n" +
+                "`/queue autoplay` — Toggle autoplay (play related tracks when queue is empty)")
             .AddField("Favorites",
                 "`/fav add <url> [alias]` — Save a track or playlist\n" +
                 "`/fav list [page]` — Show your favorites\n" +
@@ -41,6 +42,9 @@ public sealed class HelpModule : InteractionModuleBase
                 "`/fav rename <favorite> <new_name>` — Rename a favorite")
             .AddField("Search",
                 "`/search <query>` — Search YouTube and pick a track or playlist to enqueue")
+            .AddField("History",
+                "`/history list [page]` — Show recently played tracks\n" +
+                "`/history play <position>` — Re-add a track from history to the queue")
             .AddField("Other",
                 "`/now` — Show the currently playing track\n" +
                 "`/help` — Show this help message")

@@ -1,7 +1,9 @@
 using DiscordMusicBot.Domain.Favorites;
+using DiscordMusicBot.Domain.History;
 using DiscordMusicBot.Domain.Playback;
 using DiscordMusicBot.Domain.Playlists;
 using DiscordMusicBot.Domain.PlayQueue;
+using DiscordMusicBot.Domain.Settings;
 using DiscordMusicBot.Infrastructure.Database;
 using DiscordMusicBot.Infrastructure.Options;
 using DiscordMusicBot.Infrastructure.Repositories;
@@ -25,6 +27,8 @@ public static class InfrastructureConfiguration
         services.AddSingleton<IGuildPlaybackStateRepository, GuildPlaybackStateRepository>();
         services.AddSingleton<IFavoriteRepository, FavoriteRepository>();
         services.AddSingleton<IPlaylistRepository, PlaylistRepository>();
+        services.AddSingleton<IHistoryRepository, HistoryRepository>();
+        services.AddSingleton<IGuildSettingsRepository, GuildSettingsRepository>();
 
         return services;
     }
