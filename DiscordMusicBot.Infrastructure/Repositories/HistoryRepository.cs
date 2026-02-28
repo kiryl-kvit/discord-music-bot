@@ -175,9 +175,9 @@ public sealed class HistoryRepository(SqliteConnectionFactory connectionFactory)
             new CommandDefinition(
                 """
                 DELETE FROM play_queue_items
-                WHERE played_at IS NOT NULL AND played_at < @Cutoff
+                WHERE played_at IS NOT NULL AND datetime(played_at) < datetime(@Cutoff)
                 """,
-                new { Cutoff = cutoff.ToString("o") },
+                new { Cutoff = cutoff.ToString("yyyy-MM-dd HH:mm:ss") },
                 cancellationToken: cancellationToken));
     }
 }
