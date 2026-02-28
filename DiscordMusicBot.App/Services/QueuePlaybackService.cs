@@ -66,7 +66,8 @@ public sealed partial class QueuePlaybackService(
         CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
-        var (count, totalDurationMs) = await queueRepository.GetCountAndTotalDurationMsAsync(guildId, cancellationToken);
+        var (count, totalDurationMs) =
+            await queueRepository.GetCountAndTotalDurationMsAsync(guildId, cancellationToken);
 
         if (state.CurrentItem is not { } currentItem)
         {
@@ -490,7 +491,8 @@ public sealed partial class QueuePlaybackService(
                     lastPlayed.SourceType, guildId);
 
                 var compatibleItem =
-                    await historyRepository.GetLastPlayedBySourceTypesAsync(guildId, autoplaySourceTypes, cancellationToken);
+                    await historyRepository.GetLastPlayedBySourceTypesAsync(guildId, autoplaySourceTypes,
+                        cancellationToken);
                 if (compatibleItem is null)
                 {
                     logger.LogInformation("No YouTube/Spotify track found in history for autoplay in guild {GuildId}",
@@ -512,7 +514,8 @@ public sealed partial class QueuePlaybackService(
             }
 
             var queueItem = PlayQueueItem.Create(
-                guildId, 0, related.SourceType, related.Url, related.Title, related.Author, related.Duration, related.ThumbnailUrl);
+                guildId, discordClient.CurrentUser.Id, related.SourceType, related.Url, related.Title, related.Author,
+                related.Duration, related.ThumbnailUrl);
 
             await queueRepository.AddItemsAsync(guildId, [queueItem], cancellationToken);
 
