@@ -21,6 +21,9 @@ public static class InfrastructureConfiguration
         services.AddOptions<DatabaseOptions>()
             .Bind(configuration.GetSection(DatabaseOptions.SectionName));
 
+        services.AddOptions<DataCleanupOptions>()
+            .Bind(configuration.GetSection(DataCleanupOptions.SectionName));
+
         services.AddSingleton<SqliteConnectionFactory>();
         services.AddSingleton<DatabaseMigrator>();
         services.AddSingleton<IPlayQueueRepository, PlayQueueRepository>();
