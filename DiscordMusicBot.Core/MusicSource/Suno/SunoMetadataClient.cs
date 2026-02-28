@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using DiscordMusicBot.Core.MusicSource.Options;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,12 @@ public sealed partial class SunoMetadataClient(
 
     [GeneratedRegex(@"cdn1\.suno\.ai/([a-f0-9-]+)\.mp3", RegexOptions.IgnoreCase)]
     private static partial Regex CdnSongIdPattern();
+
+    [GeneratedRegex(@"\\""duration\\"":([\d.]+)")]
+    private static partial Regex DurationPattern();
+
+    [GeneratedRegex(@"\\""id\\"":\\""([a-f0-9-]+)\\"",\\""entity_type\\"":\\""song_schema\\""")]
+    private static partial Regex ClipIdPattern();
 
     public async Task<SunoTrack?> GetSongAsync(string songId, CancellationToken cancellationToken)
     {
@@ -71,6 +78,7 @@ public sealed partial class SunoMetadataClient(
     private SunoTrack? ParseSongPage(string songId, string html)
     {
         var imageUrl = ParseOgImage(html);
+        var duration = ParseDuration(html);
 
         // <title> format: "{Title} by {Artist} | Suno"
         var titleMatch = TitleTagPattern().Match(html);
@@ -78,7 +86,7 @@ public sealed partial class SunoMetadataClient(
         {
             var title = titleMatch.Groups[1].Value.Trim();
             var artist = titleMatch.Groups[2].Value.Trim();
-            return new SunoTrack(title, artist, songId, imageUrl);
+            return new SunoTrack(title, artist, songId, duration, imageUrl);
         }
 
         // Fallback: use og:title (title only, no artist)
@@ -86,7 +94,7 @@ public sealed partial class SunoMetadataClient(
         if (ogTitleMatch.Success)
         {
             var title = ogTitleMatch.Groups[1].Value.Trim();
-            return new SunoTrack(title, Artist: null, songId, imageUrl);
+            return new SunoTrack(title, Artist: null, songId, duration, imageUrl);
         }
 
         logger.LogWarning("Could not parse metadata from Suno song page for {SongId}.", songId);
@@ -96,6 +104,7 @@ public sealed partial class SunoMetadataClient(
     private List<SunoTrack> ParsePlaylistPage(string html)
     {
         var titlesBySongId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var durationsBySongId = ParseDurationsBySongId(html);
 
         foreach (Match match in PlaylistSongPattern().Matches(html))
         {
@@ -127,7 +136,8 @@ public sealed partial class SunoMetadataClient(
             }
 
             var title = titlesBySongId.GetValueOrDefault(songId) ?? songId;
-            tracks.Add(new SunoTrack(title, Artist: null, songId));
+            durationsBySongId.TryGetValue(songId, out var duration);
+            tracks.Add(new SunoTrack(title, Artist: null, songId, duration));
         }
 
         if (tracks.Count != 0)
@@ -143,7 +153,8 @@ public sealed partial class SunoMetadataClient(
                 break;
             }
 
-            tracks.Add(new SunoTrack(title, Artist: null, songId));
+            durationsBySongId.TryGetValue(songId, out var duration);
+            tracks.Add(new SunoTrack(title, Artist: null, songId, duration));
         }
 
         return tracks;
@@ -159,6 +170,44 @@ public sealed partial class SunoMetadataClient(
     {
         var match = OgImagePattern().Match(html);
         return match.Success ? match.Groups[1].Value.Trim() : null;
+    }
+
+    private static TimeSpan? ParseDuration(string html)
+    {
+        var match = DurationPattern().Match(html);
+        if (match.Success &&
+            double.TryParse(match.Groups[1].Value, CultureInfo.InvariantCulture, out var seconds) &&
+            seconds > 0)
+        {
+            return TimeSpan.FromSeconds(seconds);
+        }
+
+        return null;
+    }
+
+    private static Dictionary<string, TimeSpan> ParseDurationsBySongId(string html)
+    {
+        var result = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
+
+        var clipIds = ClipIdPattern().Matches(html);
+        var durations = DurationPattern().Matches(html);
+
+        if (clipIds.Count == 0 || clipIds.Count != durations.Count)
+        {
+            return result;
+        }
+
+        for (var i = 0; i < clipIds.Count; i++)
+        {
+            var songId = clipIds[i].Groups[1].Value;
+            if (double.TryParse(durations[i].Groups[1].Value, CultureInfo.InvariantCulture, out var seconds) &&
+                seconds > 0)
+            {
+                result.TryAdd(songId, TimeSpan.FromSeconds(seconds));
+            }
+        }
+
+        return result;
     }
 
     private async Task<string?> FetchHtmlAsync(string url, CancellationToken cancellationToken)

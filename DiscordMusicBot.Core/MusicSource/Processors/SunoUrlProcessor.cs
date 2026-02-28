@@ -89,7 +89,7 @@ public sealed partial class SunoUrlProcessor(
 
     private static MusicSource ToMusicSource(SunoTrack track)
     {
-        return new MusicSource(SourceType.Suno, track.Title, track.SongUrl, track.Artist, Duration: null, track.ImageUrl);
+        return new MusicSource(SourceType.Suno, track.Title, track.SongUrl, track.Artist, track.Duration, track.ImageUrl);
     }
 
     private static bool TryParseSunoUrl(string url, out SunoResourceType resourceType, out string resourceId)
