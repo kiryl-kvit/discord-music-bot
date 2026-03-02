@@ -318,19 +318,33 @@ public sealed class QueueModule(
     }
 
     [SlashCommand("autoplay", "Toggle autoplay mode")]
-    public async Task AutoplayAsync()
+    public async Task AutoplayAsync(
+        [Summary("queue_size", "Number of tracks to add when autoplay triggers (default: 25)")]
+        [MinValue(1)] [MaxValue(50)]
+        int? queue_size = null)
     {
         var guildId = Context.Guild.Id;
 
         var settings = await guildSettingsRepository.GetAsync(guildId);
-        var newState = settings is not { AutoplayEnabled: true };
 
+        if (queue_size.HasValue)
+        {
+            await guildSettingsRepository.SetAutoplayQueueSizeAsync(guildId, queue_size.Value);
+            logger.LogInformation("User {UserId} set autoplay queue size to {QueueSize} in guild {GuildId}",
+                Context.User.Id, queue_size.Value, guildId);
+        }
+
+        var newState = settings is not { AutoplayEnabled: true };
         await guildSettingsRepository.SetAutoplayAsync(guildId, newState);
+
+        var effectiveQueueSize = queue_size
+                                 ?? settings?.AutoplayQueueSize
+                                 ?? GuildSettings.DefaultAutoplayQueueSize;
 
         logger.LogInformation("User {UserId} toggled autoplay to {State} in guild {GuildId}",
             Context.User.Id, newState, guildId);
 
-        var embed = QueueEmbedBuilder.BuildAutoplayToggledEmbed(newState);
+        var embed = QueueEmbedBuilder.BuildAutoplayToggledEmbed(newState, effectiveQueueSize);
         await RespondAsync(embed: embed);
     }
 }

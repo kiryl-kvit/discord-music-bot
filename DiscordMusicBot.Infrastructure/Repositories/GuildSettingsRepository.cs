@@ -13,7 +13,7 @@ public sealed class GuildSettingsRepository(SqliteConnectionFactory connectionFa
 
         var row = await connection.QueryFirstOrDefaultAsync<GuildSettingsRow>(
             new CommandDefinition(
-                "SELECT guild_id, autoplay_enabled FROM guild_settings WHERE guild_id = @GuildId",
+                "SELECT guild_id, autoplay_enabled, autoplay_queue_size FROM guild_settings WHERE guild_id = @GuildId",
                 new { GuildId = guildId.ToString() },
                 cancellationToken: cancellationToken));
 
@@ -33,6 +33,22 @@ public sealed class GuildSettingsRepository(SqliteConnectionFactory connectionFa
                 ON CONFLICT(guild_id) DO UPDATE SET autoplay_enabled = @Enabled
                 """,
                 new { GuildId = guildId.ToString(), Enabled = enabled ? 1 : 0 },
+                cancellationToken: cancellationToken));
+    }
+
+    public async Task SetAutoplayQueueSizeAsync(ulong guildId, int queueSize,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO guild_settings (guild_id, autoplay_enabled, autoplay_queue_size)
+                VALUES (@GuildId, 0, @QueueSize)
+                ON CONFLICT(guild_id) DO UPDATE SET autoplay_queue_size = @QueueSize
+                """,
+                new { GuildId = guildId.ToString(), QueueSize = queueSize },
                 cancellationToken: cancellationToken));
     }
 }
