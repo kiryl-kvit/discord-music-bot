@@ -10,6 +10,7 @@ public sealed class GuildPlaybackState
 
     public volatile bool IsPlaying;
     public volatile bool IsConnected;
+    public volatile bool IsReconnecting;
     private int _autoplayFillInProgress;
 
     public bool TryBeginAutoplayFill() =>

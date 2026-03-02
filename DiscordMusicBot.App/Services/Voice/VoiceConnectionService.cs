@@ -9,15 +9,29 @@ namespace DiscordMusicBot.App.Services.Voice;
 
 public sealed class VoiceConnectionService(DiscordApiService discordApiService, ILogger<VoiceConnectionService> logger)
 {
+    private const int MaxReconnectAttempts = 5;
+    private static readonly TimeSpan[] ReconnectDelays =
+    [
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(4),
+        TimeSpan.FromSeconds(8),
+        TimeSpan.FromSeconds(16),
+        TimeSpan.FromSeconds(30),
+    ];
+
     private readonly ConcurrentDictionary<ulong, VoiceConnection> _connections = new();
+    private readonly ConcurrentDictionary<ulong, CancellationTokenSource> _reconnecting = new();
 
     public event Func<ulong, Task>? Connected;
     public event Func<ulong, Task>? Disconnected;
+    public event Func<ulong, Task>? Reconnecting;
 
     public async Task<IAudioClient> JoinAsync(IVoiceChannel channel,
         CancellationToken cancellationToken = default)
     {
         var guildId = channel.GuildId;
+
+        CancelReconnection(guildId);
 
         if (_connections.TryRemove(guildId, out var existing))
         {
@@ -34,13 +48,11 @@ public sealed class VoiceConnectionService(DiscordApiService discordApiService, 
         logger.LogInformation("Joining voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(10));
         IAudioClient audioClient;
 
         try
         {
-            audioClient = await channel.ConnectAsync(selfDeaf: true).WaitAsync(cts.Token);
+            audioClient = await EstablishConnectionAsync(channel, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -53,14 +65,10 @@ public sealed class VoiceConnectionService(DiscordApiService discordApiService, 
                 "This usually means the bot lacks the Connect permission on the channel.");
         }
 
-        audioClient.Disconnected += exception => OnAudioClientDisconnected(guildId, exception);
-
-        _connections[guildId] = new VoiceConnection(audioClient, channel.Id);
-
         logger.LogInformation("Connected to voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
             channel.Name, channel.Id, guildId);
 
-        await NotifyConnectedAsync(guildId);
+        await RaiseEventAsync(Connected, guildId);
 
         return audioClient;
     }
@@ -69,9 +77,11 @@ public sealed class VoiceConnectionService(DiscordApiService discordApiService, 
     {
         var guildId = channel.GuildId;
 
+        CancelReconnection(guildId);
+
         if (_connections.TryRemove(guildId, out var existing))
         {
-            await NotifyDisconnectedAsync(guildId);
+            await RaiseEventAsync(Disconnected, guildId);
 
             try
             {
@@ -92,20 +102,28 @@ public sealed class VoiceConnectionService(DiscordApiService discordApiService, 
             channel.Name, channel.Id, guildId);
     }
 
-    private async Task NotifyConnectedAsync(ulong guildId)
+    private async Task RaiseEventAsync(Func<ulong, Task>? handler, ulong guildId)
     {
-        if (Connected is not null)
+        if (handler is not null)
         {
-            await Connected.Invoke(guildId);
+            await handler.Invoke(guildId);
         }
     }
 
-    private async Task NotifyDisconnectedAsync(ulong guildId)
+    private async Task<IAudioClient> EstablishConnectionAsync(IVoiceChannel channel,
+        CancellationToken cancellationToken)
     {
-        if (Disconnected is not null)
-        {
-            await Disconnected.Invoke(guildId);
-        }
+        var guildId = channel.GuildId;
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(10));
+
+        var audioClient = await channel.ConnectAsync(selfDeaf: true).WaitAsync(cts.Token);
+
+        audioClient.Disconnected += exception => OnAudioClientDisconnected(guildId, exception);
+        _connections[guildId] = new VoiceConnection(audioClient, channel.Id);
+
+        return audioClient;
     }
 
     public IAudioClient? GetConnection(ulong guildId)
@@ -120,6 +138,8 @@ public sealed class VoiceConnectionService(DiscordApiService discordApiService, 
 
     public async Task DisconnectAsync(ulong guildId, CancellationToken cancellationToken = default)
     {
+        CancelReconnection(guildId);
+
         if (!_connections.TryRemove(guildId, out var connection))
         {
             return;
@@ -175,23 +195,172 @@ public sealed class VoiceConnectionService(DiscordApiService discordApiService, 
         else if (beforeChannel is not null && afterChannel is null)
         {
             var guildId = beforeChannel.Guild.Id;
+
+            if (_reconnecting.ContainsKey(guildId))
+            {
+                logger.LogInformation(
+                    "Bot left voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId} " +
+                    "during reconnection attempt — suppressing disconnect event",
+                    beforeChannel.Name, beforeChannel.Id, guildId);
+                return;
+            }
+
             logger.LogInformation(
                 "Bot was disconnected from voice channel '{ChannelName}' ({ChannelId}) in guild {GuildId}",
                 beforeChannel.Name, beforeChannel.Id, guildId);
 
             _connections.TryRemove(guildId, out _);
 
-            await NotifyDisconnectedAsync(guildId);
+            await RaiseEventAsync(Disconnected, guildId);
         }
     }
 
-    private Task OnAudioClientDisconnected(ulong guildId, Exception exception)
+    private async Task OnAudioClientDisconnected(ulong guildId, Exception exception)
     {
-        // The IAudioClient.Disconnected event fires on transport-level disconnects.
-        // The UserVoiceStateUpdated handler above covers intentional disconnect/kicks,
-        // so this primarily handles unexpected transport failures.
-        logger.LogWarning(exception, "Audio client disconnected unexpectedly in guild {GuildId}", guildId);
+        if (!_connections.TryGetValue(guildId, out var connection))
+        {
+            return;
+        }
 
-        return Task.CompletedTask;
+        if (_reconnecting.ContainsKey(guildId))
+        {
+            return;
+        }
+
+        logger.LogWarning(exception, "Audio client disconnected unexpectedly in guild {GuildId}. " +
+                                     "Starting reconnection", guildId);
+
+        var channelId = connection.ChannelId;
+
+        await RaiseEventAsync(Reconnecting, guildId);
+
+        _ = Task.Run(() => ReconnectAsync(guildId, channelId));
+    }
+
+    private async Task ReconnectAsync(ulong guildId, ulong channelId)
+    {
+        var cts = new CancellationTokenSource();
+
+        if (!_reconnecting.TryAdd(guildId, cts))
+        {
+            cts.Dispose();
+            return;
+        }
+
+        if (_connections.TryRemove(guildId, out var stale))
+        {
+            try
+            {
+                await stale.Client.StopAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        try
+        {
+            var token = cts.Token;
+
+            for (var attempt = 0; attempt < MaxReconnectAttempts; attempt++)
+            {
+                var delay = ReconnectDelays[Math.Min(attempt, ReconnectDelays.Length - 1)];
+
+                logger.LogInformation(
+                    "Reconnect attempt {Attempt}/{Max} for guild {GuildId} in {Delay}s",
+                    attempt + 1, MaxReconnectAttempts, guildId, delay.TotalSeconds);
+
+                try
+                {
+                    await Task.Delay(delay, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    logger.LogInformation(
+                        "Reconnection cancelled for guild {GuildId} during backoff delay", guildId);
+                    return;
+                }
+
+                var channel = discordApiService.GetVoiceChannel(guildId, channelId);
+                if (channel is null)
+                {
+                    logger.LogWarning("Voice channel {ChannelId} no longer exists in guild {GuildId}. " +
+                                      "Aborting reconnection", channelId, guildId);
+                    break;
+                }
+
+                try
+                {
+                    await EstablishConnectionAsync(channel, token);
+
+                    logger.LogInformation(
+                        "Successfully reconnected to voice channel '{ChannelName}' ({ChannelId}) " +
+                        "in guild {GuildId} on attempt {Attempt}",
+                        channel.Name, channel.Id, guildId, attempt + 1);
+
+                    _reconnecting.TryRemove(guildId, out _);
+                    cts.Dispose();
+
+                    await RaiseEventAsync(Connected, guildId);
+                    return;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    logger.LogInformation(
+                        "Reconnection cancelled for guild {GuildId} during connect attempt", guildId);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex,
+                        "Reconnect attempt {Attempt}/{Max} failed for guild {GuildId}",
+                        attempt + 1, MaxReconnectAttempts, guildId);
+                }
+            }
+
+            logger.LogError(
+                "All {Max} reconnect attempts failed for guild {GuildId}. Giving up",
+                MaxReconnectAttempts, guildId);
+        }
+        finally
+        {
+            if (_reconnecting.TryRemove(guildId, out var removed))
+            {
+                removed.Dispose();
+            }
+        }
+
+        try
+        {
+            var channel = discordApiService.GetVoiceChannel(guildId, channelId);
+            if (channel is not null)
+            {
+                await channel.DisconnectAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error disconnecting from voice channel after failed " +
+                                  "reconnection in guild {GuildId}", guildId);
+        }
+
+        _connections.TryRemove(guildId, out _);
+        await RaiseEventAsync(Disconnected, guildId);
+    }
+
+    private void CancelReconnection(ulong guildId)
+    {
+        if (_reconnecting.TryRemove(guildId, out var cts))
+        {
+            logger.LogInformation("Cancelling ongoing reconnection for guild {GuildId}", guildId);
+            try
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
     }
 }

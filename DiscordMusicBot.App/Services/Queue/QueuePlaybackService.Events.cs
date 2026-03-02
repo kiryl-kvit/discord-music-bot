@@ -24,21 +24,47 @@ public sealed partial class QueuePlaybackService
         }
 
         state.IsConnected = true;
+        state.IsReconnecting = false;
 
         await StartAsync(guildId);
     }
 
     public async Task OnVoiceDisconnected(ulong guildId)
     {
-        logger.LogInformation("Voice disconnected in guild {GuildId}. Stopping playback.", guildId);
-
         var state = GetState(guildId);
+        var wasReconnecting = state.IsReconnecting;
         state.IsConnected = false;
+        state.IsReconnecting = false;
+
+        if (wasReconnecting)
+        {
+            logger.LogInformation("Reconnection failed in guild {GuildId}. Stopping playback.", guildId);
+            await SendFeedbackAsync(guildId,
+                "Voice connection lost",
+                "The audio connection was dropped and all reconnection attempts failed. " +
+                "Use `/join` to reconnect and `/queue resume` to restart playback.",
+                CancellationToken.None);
+        }
+        else
+        {
+            logger.LogInformation("Voice disconnected in guild {GuildId}. Stopping playback.", guildId);
+        }
 
         await PauseAsync(guildId);
 
         state.VoiceChannelId = null;
         await ClearPersistedStateAsync(guildId, CancellationToken.None);
+    }
+
+    public async Task OnVoiceReconnecting(ulong guildId)
+    {
+        logger.LogInformation("Voice reconnecting in guild {GuildId}. Pausing playback until reconnected.", guildId);
+
+        var state = GetState(guildId);
+        state.IsConnected = false;
+        state.IsReconnecting = true;
+
+        await PauseAsync(guildId);
     }
 
     private async Task RaiseTrackStartedAsync(ulong guildId, PlayQueueItem item)
