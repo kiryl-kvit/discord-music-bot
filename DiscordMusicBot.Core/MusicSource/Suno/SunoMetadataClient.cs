@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.RegularExpressions;
 using DiscordMusicBot.Core.MusicSource.Options;
 using Microsoft.Extensions.Logging;
@@ -84,8 +85,8 @@ public sealed partial class SunoMetadataClient(
         var titleMatch = TitleTagPattern().Match(html);
         if (titleMatch.Success)
         {
-            var title = titleMatch.Groups[1].Value.Trim();
-            var artist = titleMatch.Groups[2].Value.Trim();
+            var title = WebUtility.HtmlDecode(titleMatch.Groups[1].Value.Trim());
+            var artist = WebUtility.HtmlDecode(titleMatch.Groups[2].Value.Trim());
             return new SunoTrack(title, artist, songId, duration, imageUrl);
         }
 
@@ -93,7 +94,7 @@ public sealed partial class SunoMetadataClient(
         var ogTitleMatch = OgTitlePattern().Match(html);
         if (ogTitleMatch.Success)
         {
-            var title = ogTitleMatch.Groups[1].Value.Trim();
+            var title = WebUtility.HtmlDecode(ogTitleMatch.Groups[1].Value.Trim());
             return new SunoTrack(title, Artist: null, songId, duration, imageUrl);
         }
 
@@ -108,7 +109,7 @@ public sealed partial class SunoMetadataClient(
 
         foreach (Match match in PlaylistSongPattern().Matches(html))
         {
-            var title = match.Groups[1].Value.Trim();
+            var title = WebUtility.HtmlDecode(match.Groups[1].Value.Trim());
             var songId = match.Groups[2].Value;
 
             titlesBySongId.TryAdd(songId, title);
@@ -163,7 +164,7 @@ public sealed partial class SunoMetadataClient(
     private static string? ParseOgTitle(string html)
     {
         var match = OgTitlePattern().Match(html);
-        return match.Success ? match.Groups[1].Value.Trim() : null;
+        return match.Success ? WebUtility.HtmlDecode(match.Groups[1].Value.Trim()) : null;
     }
 
     private static string? ParseOgImage(string html)

@@ -1,3 +1,4 @@
+using System.Net;
 using DiscordMusicBot.Core.MusicSource.Search.Abstraction;
 using DiscordMusicBot.Core.MusicSource.Youtube;
 using Microsoft.Extensions.Logging;
@@ -31,16 +32,16 @@ public sealed class YoutubeSearchProvider(
     private static SearchResult MapToSearchResult(ISearchResult result) => result switch
     {
         VideoSearchResult video => new SearchResult(
-            video.Title,
+            WebUtility.HtmlDecode(video.Title),
             YoutubeHelpers.VideoUrl(video.Id),
-            video.Author.ChannelTitle,
+            WebUtility.HtmlDecode(video.Author.ChannelTitle),
             video.Duration,
             SearchResultKind.Track),
 
         PlaylistSearchResult playlist => new SearchResult(
-            playlist.Title,
+            WebUtility.HtmlDecode(playlist.Title),
             playlist.Url,
-            playlist.Author?.ChannelTitle,
+            WebUtility.HtmlDecode(playlist.Author?.ChannelTitle),
             null,
             SearchResultKind.Playlist),
 
