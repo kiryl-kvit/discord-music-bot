@@ -2,6 +2,7 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
+using DiscordMusicBot.App.Services.Discord;
 using DiscordMusicBot.App.Services.Favorites;
 using DiscordMusicBot.App.Services.History;
 using DiscordMusicBot.App.Services.NowPlaying;
@@ -118,6 +119,7 @@ public static class ServicesConfiguration
 
             services.AddSingleton<InteractionHandler>();
 
+            services.AddSingleton<DiscordApiService>();
             services.AddSingleton<VoiceConnectionService>();
             services.AddSingleton<QueuePlaybackService>();
             services.AddSingleton<NowPlayingMessageService>();
