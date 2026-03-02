@@ -4,4 +4,6 @@ public static class DisplayConstants
 {
     public const string UnknownAuthor = "Unknown";
     public const string UnknownDuration = "??:??";
+
+    public static string AuthorOrDefault(string? author) => author ?? UnknownAuthor;
 }

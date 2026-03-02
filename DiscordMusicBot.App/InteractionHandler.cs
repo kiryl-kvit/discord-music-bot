@@ -1,7 +1,7 @@
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
-using DiscordMusicBot.App.Services;
+using DiscordMusicBot.App.Services.Common;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App;
