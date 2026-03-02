@@ -1,5 +1,6 @@
 using DiscordMusicBot.App.Services.Common;
 using DiscordMusicBot.App.Services.Voice;
+using System.Buffers;
 using System.Collections.Concurrent;
 using Discord;
 using Discord.Audio;
@@ -30,6 +31,7 @@ public sealed partial class QueuePlaybackService(
 {
     private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
     private const int PcmBytesPerSecond = 192000; // 48kHz * 16-bit * 2 channels.
+    private const int PreBufferSize = PcmBytesPerSecond * 5; // ~5s of audio to pre-buffer before playback.
     private const int AutoplayExcludeCount = 50;
 
     private readonly ConcurrentDictionary<ulong, GuildPlaybackState> _states = new();
@@ -690,16 +692,61 @@ public sealed partial class QueuePlaybackService(
 
         try
         {
-            var buffer = new byte[PcmBufferSize];
-            long bytesWritten = 0;
-
-            int bytesRead;
-            while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(buffer, skipToken)) > 0)
+            var buffer = ArrayPool<byte>.Shared.Rent(PcmBufferSize);
+            try
             {
-                await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), skipToken);
-                bytesWritten += bytesRead;
-                state.ResumePosition =
-                    startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
+                long bytesWritten = 0;
+
+                // ── Pre-buffer phase ──────────────────────────────────────
+                // Fill ~5 s of PCM data before writing anything to Discord.
+                // This builds a buffer reserve that absorbs CDN / network
+                // jitter during the critical first seconds of playback.
+                var preBuffer = ArrayPool<byte>.Shared.Rent(PreBufferSize);
+                try
+                {
+                    var preBuffered = 0;
+                    while (preBuffered < PreBufferSize)
+                    {
+                        var read = await pcmAudioStream.Stream.ReadAsync(
+                            preBuffer.AsMemory(preBuffered, PreBufferSize - preBuffered), skipToken);
+                        if (read == 0)
+                            break;
+                        preBuffered += read;
+                    }
+
+                    // Write the pre-buffered data to Discord in chunks.
+                    var offset = 0;
+                    while (offset < preBuffered)
+                    {
+                        var chunk = Math.Min(PcmBufferSize, preBuffered - offset);
+                        await discordStream.WriteAsync(preBuffer.AsMemory(offset, chunk), skipToken);
+                        offset += chunk;
+                        bytesWritten += chunk;
+                        state.ResumePosition =
+                            startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(preBuffer);
+                }
+
+                // ── Normal streaming loop ─────────────────────────────────
+                // The large Pipe buffer in FfmpegAudioPipeline keeps FFmpeg
+                // writing ahead at CDN speed, so ReadAsync almost never blocks.
+                int bytesRead;
+                while ((bytesRead = await pcmAudioStream.Stream.ReadAsync(
+                           buffer.AsMemory(0, PcmBufferSize), skipToken)) > 0)
+                {
+                    await discordStream.WriteAsync(buffer.AsMemory(0, bytesRead), skipToken);
+                    bytesWritten += bytesRead;
+                    state.ResumePosition =
+                        startFrom + TimeSpan.FromSeconds((double)bytesWritten / PcmBytesPerSecond);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
             }
         }
         catch (OperationCanceledException)
