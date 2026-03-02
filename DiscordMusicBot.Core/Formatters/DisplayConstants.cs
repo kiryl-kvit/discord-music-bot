@@ -7,4 +7,7 @@ public static class DisplayConstants
 
     public static string AuthorOrDefault(string? author) =>
         string.IsNullOrWhiteSpace(author) ? UnknownAuthor : author;
+
+    public static string FormatAutoplayStatus(bool enabled) =>
+        $"Autoplay: {(enabled ? "on" : "off")}";
 }

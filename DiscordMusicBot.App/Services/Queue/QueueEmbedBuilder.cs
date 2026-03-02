@@ -33,8 +33,8 @@ public static class QueueEmbedBuilder
 
         var totalPages = stats.Count == 0 ? 1 : (int)Math.Ceiling((double)stats.Count / pageSize);
         var durationText = DateFormatter.FormatTime(stats.TotalDuration);
-        var autoplayText = autoplayEnabled ? "on" : "off";
-        builder.WithFooter($"Page {page}/{totalPages}  |  {stats.Count} tracks  |  {durationText} total  |  Autoplay: {autoplayText}");
+        var autoplayText = DisplayConstants.FormatAutoplayStatus(autoplayEnabled);
+        builder.WithFooter($"Page {page}/{totalPages}  |  {stats.Count} tracks  |  {durationText} total  |  {autoplayText}");
 
         return builder.Build();
     }

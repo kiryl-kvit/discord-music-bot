@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.Net;
 using DiscordMusicBot.Domain.PlayQueue;
+using DiscordMusicBot.Domain.Settings;
 using DiscordMusicBot.App.Services.Queue;
 using Microsoft.Extensions.Logging;
 
@@ -10,6 +11,7 @@ namespace DiscordMusicBot.App.Services.NowPlaying;
 public sealed class NowPlayingMessageService(
     QueuePlaybackService queuePlaybackService,
     IPlayQueueRepository queueRepository,
+    IGuildSettingsRepository guildSettingsRepository,
     ILogger<NowPlayingMessageService> logger)
 {
     private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(2);
@@ -110,10 +112,12 @@ public sealed class NowPlayingMessageService(
 
         var nextItemTask = queueRepository.PeekNextAsync(guildId, skip: 1, cancellationToken: cancellationToken);
         var statsTask = queuePlaybackService.GetQueueStatsAsync(guildId, cancellationToken);
-        await Task.WhenAll(nextItemTask, statsTask);
+        var settingsTask = guildSettingsRepository.GetAsync(guildId, cancellationToken);
+        await Task.WhenAll(nextItemTask, statsTask, settingsTask);
 
         var nextItem = nextItemTask.Result;
         var stats = statsTask.Result;
+        var settings = settingsTask.Result;
 
         return new NowPlayingInfo
         {
@@ -123,6 +127,7 @@ public sealed class NowPlayingMessageService(
             NextItem = nextItem,
             QueueCount = stats.Count,
             QueueTotalDuration = stats.TotalDuration > TimeSpan.Zero ? stats.TotalDuration : null,
+            IsAutoplayEnabled = settings?.AutoplayEnabled ?? false,
         };
     }
 

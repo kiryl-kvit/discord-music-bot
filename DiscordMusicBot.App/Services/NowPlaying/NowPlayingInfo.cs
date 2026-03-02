@@ -10,4 +10,5 @@ public class NowPlayingInfo
     public PlayQueueItem? NextItem { get; init; }
     public int QueueCount { get; init; }
     public TimeSpan? QueueTotalDuration { get; init; }
+    public bool IsAutoplayEnabled { get; init; }
 }

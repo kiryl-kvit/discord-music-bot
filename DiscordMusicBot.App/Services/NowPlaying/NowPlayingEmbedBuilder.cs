@@ -41,6 +41,9 @@ public static class NowPlayingEmbedBuilder
             footerParts.Add("Queue is empty");
         }
 
+        var autoplayText = DisplayConstants.FormatAutoplayStatus(info.IsAutoplayEnabled);
+        footerParts.Add(autoplayText);
+
         builder.WithFooter(string.Join("  |  ", footerParts));
 
         return builder.Build();
