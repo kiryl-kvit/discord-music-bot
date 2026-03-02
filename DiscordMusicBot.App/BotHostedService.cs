@@ -31,6 +31,7 @@ public sealed class BotHostedService(
 
         voiceConnectionService.Connected += queuePlaybackService.OnVoiceConnected;
         voiceConnectionService.Disconnected += queuePlaybackService.OnVoiceDisconnected;
+        voiceConnectionService.Reconnecting += queuePlaybackService.OnVoiceReconnecting;
 
         queuePlaybackService.TrackStarted += nowPlayingMessageService.OnTrackStartedAsync;
         queuePlaybackService.TrackLoading += nowPlayingMessageService.OnTrackLoadingAsync;
