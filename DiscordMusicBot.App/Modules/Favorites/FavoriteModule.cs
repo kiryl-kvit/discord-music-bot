@@ -2,7 +2,6 @@ using Discord.Interactions;
 using DiscordMusicBot.App.Services.Common;
 using DiscordMusicBot.App.Services.Favorites;
 using DiscordMusicBot.Core.Constants;
-using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.Favorites;
 using Microsoft.Extensions.Logging;
@@ -35,17 +34,6 @@ public sealed class FavoriteModule(
             return;
         }
 
-        var normalizedUrl = UrlNormalizer.TryNormalize(url);
-        if (normalizedUrl is null)
-        {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Invalid URL", "Could not process this URL.");
-            });
-            return;
-        }
-
         var urlProcessor = urlProcessorFactory.GetProcessor(url);
         var musicItemsResult = await urlProcessor.GetMusicItemsAsync(url);
 
@@ -64,7 +52,7 @@ public sealed class FavoriteModule(
         var musicItems = musicResult.Items;
         var isPlaylist = musicItems.Count > 1;
         var representative = musicItems.First();
-        var storedUrl = isPlaylist ? normalizedUrl : representative.Url;
+        var storedUrl = isPlaylist ? url : representative.Url;
         var title = isPlaylist ? (musicResult.PlaylistName ?? representative.Title) : representative.Title;
 
         var result = await favoriteService.AddAsync(

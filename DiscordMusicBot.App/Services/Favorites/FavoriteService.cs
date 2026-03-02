@@ -1,5 +1,6 @@
 using DiscordMusicBot.App.Options;
 using DiscordMusicBot.Core;
+using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Domain.Favorites;
 using Microsoft.Extensions.Options;
 
@@ -13,6 +14,8 @@ public sealed class FavoriteService(
         ulong userId, string url, string title, string? alias,
         string? author, TimeSpan? duration, bool isPlaylist, string? thumbnailUrl)
     {
+        var normalizedUrl = UrlNormalizer.TryNormalize(url) ?? url;
+
         var count = await favoriteRepository.GetCountAsync(userId);
 
         if (favoritesOptions.CurrentValue.IsLimitReached(count))
@@ -22,13 +25,13 @@ public sealed class FavoriteService(
                 "Remove some favorites before adding new ones.");
         }
 
-        if (await favoriteRepository.ExistsByUrlAsync(userId, url))
+        if (await favoriteRepository.ExistsByUrlAsync(userId, normalizedUrl))
         {
             return Result<FavoriteItem>.Failure("This item is already in your favorites.");
         }
 
         var item = FavoriteItem.Create(
-            userId, url, title, alias, author, duration, isPlaylist, thumbnailUrl);
+            userId, normalizedUrl, title, alias, author, duration, isPlaylist, thumbnailUrl);
 
         await favoriteRepository.AddAsync(item);
 

@@ -108,13 +108,15 @@ public sealed class NowPlayingControlsModule(
             return;
         }
 
+        await DeferAsync(ephemeral: true);
+
         var result = await favoriteService.AddAsync(
             userId, currentItem.Url, currentItem.Title, alias: null, currentItem.Author,
             currentItem.Duration, isPlaylist: false, currentItem.ThumbnailUrl);
 
         if (!result.IsSuccess)
         {
-            await RespondAsync(
+            await FollowupAsync(
                 embed: ErrorEmbedBuilder.Build("Cannot Add Favorite", result.ErrorMessage!),
                 ephemeral: true);
             return;
@@ -122,7 +124,7 @@ public sealed class NowPlayingControlsModule(
 
         var embed = FavoriteEmbedBuilder.BuildAddedEmbed(result.Value!);
 
-        await RespondAsync(embed: embed, ephemeral: true);
+        await FollowupAsync(embed: embed, ephemeral: true);
     }
 
     [ComponentInteraction("np:shuffle")]
@@ -135,10 +137,12 @@ public sealed class NowPlayingControlsModule(
             return;
         }
 
+        await DeferAsync(ephemeral: true);
+
         var result = await queuePlaybackService.ShuffleQueueAsync(guildId);
         if (!result.IsSuccess)
         {
-            await RespondAsync(
+            await FollowupAsync(
                 embed: ErrorEmbedBuilder.Build("Cannot shuffle", result.ErrorMessage!),
                 ephemeral: true);
             return;
@@ -150,7 +154,7 @@ public sealed class NowPlayingControlsModule(
             .WithDescription("The queue has been shuffled.")
             .Build();
 
-        await RespondAsync(embed: embed, ephemeral: true);
+        await FollowupAsync(embed: embed, ephemeral: true);
     }
 
     private async Task<bool> ValidateVoiceChannelAsync()
