@@ -17,7 +17,7 @@ public sealed class NowPlayingMessageService(
 
     private readonly ConcurrentDictionary<ulong, NowPlayingMessageState> _states = new();
 
-    public async Task OnTrackStartedAsync(ulong guildId, PlayQueueItem item)
+    public async Task OnTrackStartedAsync(ulong guildId, PlayQueueItem _)
     {
         var channel = queuePlaybackService.GetFeedbackChannel(guildId);
         if (channel is null)
@@ -72,7 +72,7 @@ public sealed class NowPlayingMessageService(
             ChannelId = channel.Id,
             MessageId = messageId,
             Channel = channel,
-            LastEditUtc = DateTimeOffset.UtcNow,
+            LastEditUtcTicks = DateTimeOffset.UtcNow.Ticks,
         };
 
         _states[guildId] = newState;
@@ -90,8 +90,13 @@ public sealed class NowPlayingMessageService(
 
         var isPaused = !queuePlaybackService.IsPlaying(guildId);
         var elapsed = queuePlaybackService.GetElapsedTime(guildId);
-        var nextItem = await queueRepository.PeekNextAsync(guildId, skip: 1, cancellationToken: cancellationToken);
-        var stats = await queuePlaybackService.GetQueueStatsAsync(guildId, cancellationToken);
+
+        var nextItemTask = queueRepository.PeekNextAsync(guildId, skip: 1, cancellationToken: cancellationToken);
+        var statsTask = queuePlaybackService.GetQueueStatsAsync(guildId, cancellationToken);
+        await Task.WhenAll(nextItemTask, statsTask);
+
+        var nextItem = nextItemTask.Result;
+        var stats = statsTask.Result;
 
         return new NowPlayingInfo
         {
@@ -155,7 +160,7 @@ public sealed class NowPlayingMessageService(
             ChannelId = channel.Id,
             MessageId = message.Id,
             Channel = channel,
-            LastEditUtc = DateTimeOffset.UtcNow,
+            LastEditUtcTicks = DateTimeOffset.UtcNow.Ticks,
         };
 
         _states[guildId] = newState;
@@ -187,13 +192,13 @@ public sealed class NowPlayingMessageService(
         }
         else
         {
-            msgState.LastEditUtc = DateTimeOffset.UtcNow;
+            Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
         }
     }
 
     private async Task UpdateToLoadingStateAsync(ulong guildId, NowPlayingMessageState msgState)
     {
-        if (DateTimeOffset.UtcNow - msgState.LastEditUtc < DebounceInterval)
+        if (DateTimeOffset.UtcNow.Ticks - Interlocked.Read(ref msgState.LastEditUtcTicks) < DebounceInterval.Ticks)
         {
             return;
         }
@@ -203,7 +208,7 @@ public sealed class NowPlayingMessageService(
 
         if (await TryModifyMessageAsync(msgState, guildId, embed, components))
         {
-            msgState.LastEditUtc = DateTimeOffset.UtcNow;
+            Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
         }
     }
 
@@ -292,7 +297,7 @@ public sealed class NowPlayingMessageService(
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
                 if (_states.TryGetValue(guildId, out var msgState)
-                    && DateTimeOffset.UtcNow - msgState.LastEditUtc < DebounceInterval)
+                    && DateTimeOffset.UtcNow.Ticks - Interlocked.Read(ref msgState.LastEditUtcTicks) < DebounceInterval.Ticks)
                 {
                     continue;
                 }

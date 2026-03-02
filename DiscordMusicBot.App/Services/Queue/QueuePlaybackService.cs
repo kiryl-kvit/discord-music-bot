@@ -76,25 +76,10 @@ public sealed partial class QueuePlaybackService(
         CancellationToken cancellationToken = default)
     {
         var state = GetState(guildId);
+        var excludeId = state.CurrentItem?.Id;
+
         var (count, totalDurationMs) =
-            await queueRepository.GetCountAndTotalDurationMsAsync(guildId, cancellationToken);
-
-        if (state.CurrentItem is not { } currentItem)
-        {
-            return new QueueStats(count, TimeSpan.FromMilliseconds(totalDurationMs));
-        }
-
-        var headItem = await queueRepository.PeekNextAsync(guildId, cancellationToken: cancellationToken);
-        if (headItem?.Id != currentItem.Id)
-        {
-            return new QueueStats(count, TimeSpan.FromMilliseconds(totalDurationMs));
-        }
-
-        count = Math.Max(0, count - 1);
-        if (currentItem.Duration.HasValue)
-        {
-            totalDurationMs = Math.Max(0, totalDurationMs - (long)currentItem.Duration.Value.TotalMilliseconds);
-        }
+            await queueRepository.GetCountAndTotalDurationMsAsync(guildId, excludeId, cancellationToken);
 
         return new QueueStats(count, TimeSpan.FromMilliseconds(totalDurationMs));
     }

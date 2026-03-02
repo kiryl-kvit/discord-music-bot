@@ -7,6 +7,6 @@ internal sealed class NowPlayingMessageState
     public ulong ChannelId { get; init; }
     public ulong MessageId { get; init; }
     public required IMessageChannel Channel { get; init; }
-    public DateTimeOffset LastEditUtc { get; set; }
+    public long LastEditUtcTicks;
     public CancellationTokenSource? TimerCts;
 }

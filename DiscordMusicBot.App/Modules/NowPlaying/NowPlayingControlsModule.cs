@@ -52,6 +52,8 @@ public sealed class NowPlayingControlsModule(
 
         var isPlaying = queuePlaybackService.IsPlaying(guildId);
 
+        await DeferAsync();
+
         if (isPlaying)
         {
             await queuePlaybackService.PauseAsync(guildId);
@@ -61,14 +63,12 @@ public sealed class NowPlayingControlsModule(
             var result = await queuePlaybackService.StartAsync(guildId);
             if (!result.IsSuccess)
             {
-                await RespondAsync(
+                await FollowupAsync(
                     embed: ErrorEmbedBuilder.Build("Cannot resume", result.ErrorMessage!),
                     ephemeral: true);
                 return;
             }
         }
-
-        await DeferAsync();
     }
 
     [ComponentInteraction("np:skip")]
@@ -89,9 +89,9 @@ public sealed class NowPlayingControlsModule(
             return;
         }
 
-        await queuePlaybackService.SkipAsync(guildId);
-
         await DeferAsync();
+
+        await queuePlaybackService.SkipAsync(guildId);
     }
 
     [ComponentInteraction("np:favorite")]
