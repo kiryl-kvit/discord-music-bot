@@ -131,15 +131,20 @@ public sealed class NowPlayingMessageService(
         };
     }
 
-    public void StopAll()
+    public async Task StopAllAsync()
     {
+        var deleteTasks = new List<Task>();
+
         foreach (var kvp in _states)
         {
             if (_states.TryRemove(kvp.Key, out var state))
             {
                 StopTimer(state);
+                deleteTasks.Add(TryDeleteMessageAsync(state, kvp.Key));
             }
         }
+
+        await Task.WhenAll(deleteTasks);
     }
 
     public async Task<bool> StopAsync(ulong guildId)
