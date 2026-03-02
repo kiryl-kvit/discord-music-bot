@@ -32,6 +32,7 @@ public sealed class GuildPlaybackState
     public long? ResumeItemId;
 
     public PlaybackTrack? PrefetchedTrack;
+    public PlaybackTrack? CurrentTrack;
 
     public IMessageChannel? FeedbackChannel;
 
@@ -95,6 +96,7 @@ public sealed class GuildPlaybackState
         PlaybackLoopTask = null;
         CurrentItem = null;
         ClearPrefetchedTrack();
+        CurrentTrack = null;
     }
 
     public void ResetElapsedTime()
