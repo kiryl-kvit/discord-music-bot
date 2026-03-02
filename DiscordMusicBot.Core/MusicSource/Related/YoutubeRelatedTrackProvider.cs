@@ -15,6 +15,11 @@ public sealed class YoutubeRelatedTrackProvider(
     public async Task<IReadOnlyList<MusicSource>> GetRelatedTracksAsync(string seedVideoUrl,
         IReadOnlyList<string> excludeUrls, int count, CancellationToken cancellationToken = default)
     {
+        if (count <= 0)
+        {
+            return [];
+        }
+
         var videoId = VideoId.TryParse(seedVideoUrl);
         if (videoId is null)
         {

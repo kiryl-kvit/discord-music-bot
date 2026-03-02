@@ -3,6 +3,8 @@ namespace DiscordMusicBot.Domain.Settings;
 public sealed class GuildSettings
 {
     public const int DefaultAutoplayQueueSize = 25;
+    public const int MinAutoplayQueueSize = 1;
+    public const int MaxAutoplayQueueSize = 50;
 
     public ulong GuildId { get; private set; }
     public bool AutoplayEnabled { get; private set; }
@@ -19,7 +21,7 @@ public sealed class GuildSettings
         {
             GuildId = guildId,
             AutoplayEnabled = autoplayEnabled,
-            AutoplayQueueSize = autoplayQueueSize
+            AutoplayQueueSize = ClampQueueSize(autoplayQueueSize)
         };
     }
 
@@ -29,7 +31,10 @@ public sealed class GuildSettings
         {
             GuildId = guildId,
             AutoplayEnabled = autoplayEnabled,
-            AutoplayQueueSize = autoplayQueueSize ?? DefaultAutoplayQueueSize
+            AutoplayQueueSize = ClampQueueSize(autoplayQueueSize ?? DefaultAutoplayQueueSize)
         };
     }
+
+    private static int ClampQueueSize(int value) =>
+        Math.Clamp(value, MinAutoplayQueueSize, MaxAutoplayQueueSize);
 }

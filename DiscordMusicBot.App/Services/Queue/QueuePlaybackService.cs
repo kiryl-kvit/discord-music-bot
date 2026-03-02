@@ -511,12 +511,11 @@ public sealed partial class QueuePlaybackService(
     {
         var state = GetState(guildId);
 
-        if (state.IsAutoplayFillInProgress)
+        if (!state.TryBeginAutoplayFill())
         {
             return AutoplayFillResult.Skipped;
         }
 
-        state.IsAutoplayFillInProgress = true;
         try
         {
             var settings = await guildSettingsRepository.GetAsync(guildId, cancellationToken);
@@ -606,7 +605,7 @@ public sealed partial class QueuePlaybackService(
         }
         finally
         {
-            state.IsAutoplayFillInProgress = false;
+            state.EndAutoplayFill();
         }
     }
 
