@@ -9,14 +9,15 @@ using DiscordMusicBot.App.Services.Voice;
 
 namespace DiscordMusicBot.App.Modules.NowPlaying;
 
+[Group("now", "Now playing controls")]
 public sealed class NowPlayingControlsModule(
     QueuePlaybackService queuePlaybackService,
     NowPlayingMessageService nowPlayingMessageService,
     VoiceConnectionService voiceConnectionService,
     FavoriteService favoriteService) : InteractionModuleBase
 {
-    [SlashCommand("now", "Show the currently playing track")]
-    public async Task NowPlayingAsync()
+    [SlashCommand("start", "Show and track the currently playing track")]
+    public async Task StartAsync()
     {
         var guildId = Context.Guild.Id;
 
@@ -37,6 +38,31 @@ public sealed class NowPlayingControlsModule(
 
         var response = await GetOriginalResponseAsync();
         nowPlayingMessageService.RegisterCommandResponse(guildId, Context.Channel, response.Id);
+    }
+
+    [SlashCommand("stop", "Stop the live now-playing message")]
+    public async Task StopAsync()
+    {
+        var guildId = Context.Guild.Id;
+
+        var stopped = await nowPlayingMessageService.StopAsync(guildId);
+        if (!stopped)
+        {
+            var errorEmbed = ErrorEmbedBuilder.Build(
+                "No active now-playing message",
+                "There is no live now-playing message to stop.",
+                "Use `/now start` to start one.");
+            await RespondAsync(embed: errorEmbed, ephemeral: true);
+            return;
+        }
+
+        var embed = new EmbedBuilder()
+            .WithTitle("Now Playing Stopped")
+            .WithColor(Color.Green)
+            .WithDescription("The live now-playing message has been stopped.")
+            .Build();
+
+        await RespondAsync(embed: embed, ephemeral: true);
     }
 
     [ComponentInteraction("np:pause_resume")]

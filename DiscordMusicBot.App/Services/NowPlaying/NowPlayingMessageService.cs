@@ -19,13 +19,30 @@ public sealed class NowPlayingMessageService(
 
     public async Task OnTrackStartedAsync(ulong guildId, PlayQueueItem _)
     {
-        var channel = queuePlaybackService.GetFeedbackChannel(guildId);
-        if (channel is null)
+        if (!_states.TryGetValue(guildId, out var msgState))
         {
             return;
         }
 
-        await SendOrUpdateMessageAsync(guildId, channel);
+        var info = await BuildNowPlayingInfoAsync(guildId);
+        if (info is null)
+        {
+            return;
+        }
+
+        var embed = NowPlayingEmbedBuilder.BuildEmbed(info);
+        var components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
+
+        if (await TryModifyMessageAsync(msgState, guildId, embed, components))
+        {
+            Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
+            StopTimer(msgState);
+            StartTimer(guildId, msgState);
+        }
+        else if (_states.TryRemove(guildId, out var removed))
+        {
+            StopTimer(removed);
+        }
     }
 
     public async Task OnTrackLoadingAsync(ulong guildId)
@@ -120,66 +137,16 @@ public sealed class NowPlayingMessageService(
         }
     }
 
-    private async Task SendOrUpdateMessageAsync(ulong guildId, IMessageChannel channel)
+    public async Task<bool> StopAsync(ulong guildId)
     {
-        var info = await BuildNowPlayingInfoAsync(guildId);
-        if (info is null)
+        if (!_states.TryRemove(guildId, out var msgState))
         {
-            return;
+            return false;
         }
 
-        var embed = NowPlayingEmbedBuilder.BuildEmbed(info);
-        var components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
-
-        if (_states.TryGetValue(guildId, out var existingState) && existingState.ChannelId == channel.Id)
-        {
-            if (await TryModifyMessageAsync(existingState, guildId, embed, components))
-            {
-                Interlocked.Exchange(ref existingState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
-                StopTimer(existingState);
-                StartTimer(guildId, existingState);
-                return;
-            }
-
-            if (_states.TryRemove(guildId, out var failedState))
-            {
-                StopTimer(failedState);
-            }
-        }
-        else if (_states.TryRemove(guildId, out var oldState))
-        {
-            StopTimer(oldState);
-            await TryDeleteMessageAsync(oldState, guildId);
-        }
-
-        IUserMessage message;
-        try
-        {
-            message = await channel.SendMessageAsync(embed: embed, components: components);
-        }
-        catch (HttpException ex)
-        {
-            logger.LogWarning(ex,
-                "Failed to send now-playing message in guild {GuildId} (HTTP {StatusCode})",
-                guildId, (int?)ex.HttpCode);
-            return;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to send now-playing message in guild {GuildId}", guildId);
-            return;
-        }
-
-        var newState = new NowPlayingMessageState
-        {
-            ChannelId = channel.Id,
-            MessageId = message.Id,
-            Channel = channel,
-            LastEditUtcTicks = DateTimeOffset.UtcNow.Ticks,
-        };
-
-        _states[guildId] = newState;
-        StartTimer(guildId, newState);
+        StopTimer(msgState);
+        await TryDeleteMessageAsync(msgState, guildId);
+        return true;
     }
 
     private async Task UpdateMessageAsync(ulong guildId)
