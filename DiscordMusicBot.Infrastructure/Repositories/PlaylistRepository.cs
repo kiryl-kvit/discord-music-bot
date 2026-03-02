@@ -240,12 +240,13 @@ public sealed class PlaylistRepository(SqliteConnectionFactory connectionFactory
             new CommandDefinition(
                 """
                 INSERT INTO playlist_items (playlist_id, position, url, title, author, duration_ms, thumbnail_url)
-                VALUES (@PlaylistId, @Position, @Url, @Title, @Author, @DurationMs, @ThumbnailUrl)
+                VALUES (@PlaylistId,
+                        (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_items WHERE playlist_id = @PlaylistId),
+                        @Url, @Title, @Author, @DurationMs, @ThumbnailUrl)
                 """,
                 new
                 {
                     PlaylistId = playlistId,
-                    item.Position,
                     item.Url,
                     item.Title,
                     item.Author,

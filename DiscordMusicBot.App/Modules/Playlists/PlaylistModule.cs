@@ -307,7 +307,7 @@ public sealed class PlaylistModule(
             : null;
 
         var playlistItem = PlaylistItem.Create(
-            playlist.TrackCount, currentItem.Url, currentItem.Title,
+            position: 0, currentItem.Url, currentItem.Title,
             currentItem.Author, durationMs, currentItem.ThumbnailUrl);
 
         var result = await playlistService.AddItemAsync(playlist, playlistItem);
