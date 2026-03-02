@@ -1,7 +1,9 @@
 using Discord;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
-using DiscordMusicBot.App.Services;
+using DiscordMusicBot.App.Services.NowPlaying;
+using DiscordMusicBot.App.Services.Queue;
+using DiscordMusicBot.App.Services.Voice;
 using DiscordMusicBot.Infrastructure.Database;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -14,6 +16,7 @@ public sealed class BotHostedService(
     InteractionHandler interactionHandler,
     VoiceConnectionService voiceConnectionService,
     QueuePlaybackService queuePlaybackService,
+    NowPlayingMessageService nowPlayingMessageService,
     DatabaseMigrator migrator,
     IOptions<BotSettings> botSettings,
     ILogger<BotHostedService> logger) : IHostedService
@@ -29,6 +32,12 @@ public sealed class BotHostedService(
         voiceConnectionService.Connected += queuePlaybackService.OnVoiceConnected;
         voiceConnectionService.Disconnected += queuePlaybackService.OnVoiceDisconnected;
 
+        queuePlaybackService.TrackStarted += nowPlayingMessageService.OnTrackStartedAsync;
+        queuePlaybackService.TrackLoading += nowPlayingMessageService.OnTrackLoadingAsync;
+        queuePlaybackService.PlaybackPaused += nowPlayingMessageService.OnPlaybackPausedAsync;
+        queuePlaybackService.PlaybackResumed += nowPlayingMessageService.OnPlaybackResumedAsync;
+        queuePlaybackService.PlaybackStopped += nowPlayingMessageService.OnPlaybackStoppedAsync;
+
         discordClient.Ready += OnReadyAsync;
 
         await interactionHandler.InitializeAsync(cancellationToken);
@@ -43,6 +52,7 @@ public sealed class BotHostedService(
     {
         logger.LogInformation("Bot is shutting down");
 
+        nowPlayingMessageService.StopAll();
         await queuePlaybackService.GracefulStopAsync(cancellationToken);
         await voiceConnectionService.DisconnectAllAsync(cancellationToken);
         await discordClient.StopAsync();

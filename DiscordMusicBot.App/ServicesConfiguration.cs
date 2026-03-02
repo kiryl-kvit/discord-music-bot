@@ -2,7 +2,12 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Options;
-using DiscordMusicBot.App.Services;
+using DiscordMusicBot.App.Services.Favorites;
+using DiscordMusicBot.App.Services.History;
+using DiscordMusicBot.App.Services.NowPlaying;
+using DiscordMusicBot.App.Services.Playlists;
+using DiscordMusicBot.App.Services.Queue;
+using DiscordMusicBot.App.Services.Voice;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.Options;
@@ -115,6 +120,9 @@ public static class ServicesConfiguration
 
             services.AddSingleton<VoiceConnectionService>();
             services.AddSingleton<QueuePlaybackService>();
+            services.AddSingleton<NowPlayingMessageService>();
+            services.AddScoped<FavoriteService>();
+            services.AddScoped<PlaylistService>();
 
             services.AddHostedService<BotHostedService>();
             services.AddHostedService<DataCleanupService>();

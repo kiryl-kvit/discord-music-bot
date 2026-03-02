@@ -1,0 +1,38 @@
+using Discord.Interactions;
+using DiscordMusicBot.App.Services.Queue;
+using DiscordMusicBot.Domain.Settings;
+
+namespace DiscordMusicBot.App.Modules.Queue;
+
+public sealed class QueuePaginationModule(
+    QueuePlaybackService queuePlaybackService,
+    IGuildSettingsRepository guildSettingsRepository) : InteractionModuleBase
+{
+    [ComponentInteraction("queue:page:*")]
+    public async Task HandlePageAsync(int page)
+    {
+        var guildId = Context.Guild.Id;
+
+        page = Math.Max(1, page);
+        const int pageSize = QueueEmbedBuilder.PageSize;
+        var pageIndex = page - 1;
+        var skip = pageIndex * pageSize;
+
+        var items = await queuePlaybackService.GetQueueItemsAsync(guildId, skip, take: pageSize + 1);
+        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var stats = await queuePlaybackService.GetQueueStatsAsync(guildId);
+        var settings = await guildSettingsRepository.GetAsync(guildId);
+        var hasNextPage = items.Count > pageSize;
+        var pageItems = hasNextPage ? items.Take(pageSize).ToList() : items;
+
+        var embed = QueueEmbedBuilder.BuildQueueEmbed(pageItems, currentItem, page, pageSize, stats,
+            settings is { AutoplayEnabled: true });
+        var components = QueueEmbedBuilder.BuildQueuePageControls(page, hasNextPage);
+
+        await ((Discord.IComponentInteraction)Context.Interaction).UpdateAsync(msg =>
+        {
+            msg.Embed = embed;
+            msg.Components = components;
+        });
+    }
+}

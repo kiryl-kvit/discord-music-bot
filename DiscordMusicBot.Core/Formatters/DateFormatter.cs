@@ -8,4 +8,11 @@ public static class DateFormatter
             ? duration.ToString(@"h\:mm\:ss")
             : duration.ToString(@"m\:ss");
     }
+
+    public static string FormatTimeOrDefault(TimeSpan? duration)
+    {
+        return duration is not null
+            ? FormatTime(duration.Value)
+            : DisplayConstants.UnknownDuration;
+    }
 }
