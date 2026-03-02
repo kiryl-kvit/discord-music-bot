@@ -423,6 +423,7 @@ public sealed partial class QueuePlaybackService(
                 logger.LogInformation("Now playing: '{Title}' by {Author} ({Duration}) in guild {GuildId}",
                     item.Title, item.Author ?? "Unknown", item.Duration, guildId);
 
+                state.ResetElapsedTime();
                 await SetActivityAsync(item.Title, pauseToken);
                 await RaiseTrackStartedAsync(guildId, item);
 
