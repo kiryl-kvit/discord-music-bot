@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.IO.Pipelines;
 using DiscordMusicBot.Core.MusicSource.Options;
@@ -12,12 +13,20 @@ public sealed class FfmpegAudioPipeline(
     IOptionsMonitor<MusicSourcesOptions> musicSourcesOptions,
     ILogger<FfmpegAudioPipeline> logger)
 {
+    // 5 MB pause / 1 MB resume — gives FFmpeg ~26 s of write-ahead room at
+    // 48 kHz 16-bit stereo (192 000 B/s), absorbing transient CDN hiccups.
+    private static readonly PipeOptions AudioPipeOptions = new(
+        pool: MemoryPool<byte>.Shared,
+        pauseWriterThreshold: 5 * 1024 * 1024,
+        resumeWriterThreshold: 1 * 1024 * 1024,
+        useSynchronizationContext: false);
+
     public Task<Result<PcmAudioStream>> GetAudioStreamAsync(ResolvedStream resolved,
         TimeSpan startFrom = default, CancellationToken cancellationToken = default)
     {
         try
         {
-            var pipe = new Pipe();
+            var pipe = new Pipe(AudioPipeOptions);
 
             var ffmpegTask = RunFfmpegAsync(resolved.StreamUrl, startFrom, pipe.Writer, cancellationToken);
 
@@ -64,7 +73,9 @@ public sealed class FfmpegAudioPipeline(
                     options
                         .WithCustomArgument("-reconnect 1")
                         .WithCustomArgument("-reconnect_streamed 1")
-                        .WithCustomArgument("-reconnect_delay_max 5");
+                        .WithCustomArgument("-reconnect_delay_max 5")
+                        .WithCustomArgument("-analyzeduration 0")
+                        .WithCustomArgument("-probesize 32");
                 })
                 .OutputToPipe(pipeSink, options =>
                 {
