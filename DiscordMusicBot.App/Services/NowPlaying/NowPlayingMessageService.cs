@@ -25,7 +25,7 @@ public sealed class NowPlayingMessageService(
             return;
         }
 
-        await SendNewMessageAsync(guildId, channel);
+        await SendOrUpdateMessageAsync(guildId, channel);
     }
 
     public async Task OnTrackLoadingAsync(ulong guildId)
@@ -120,14 +120,8 @@ public sealed class NowPlayingMessageService(
         }
     }
 
-    private async Task SendNewMessageAsync(ulong guildId, IMessageChannel channel)
+    private async Task SendOrUpdateMessageAsync(ulong guildId, IMessageChannel channel)
     {
-        if (_states.TryRemove(guildId, out var oldState))
-        {
-            StopTimer(oldState);
-            await TryDeleteMessageAsync(oldState, guildId);
-        }
-
         var info = await BuildNowPlayingInfoAsync(guildId);
         if (info is null)
         {
@@ -136,6 +130,27 @@ public sealed class NowPlayingMessageService(
 
         var embed = NowPlayingEmbedBuilder.BuildEmbed(info);
         var components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
+
+        if (_states.TryGetValue(guildId, out var existingState) && existingState.ChannelId == channel.Id)
+        {
+            if (await TryModifyMessageAsync(existingState, guildId, embed, components))
+            {
+                Interlocked.Exchange(ref existingState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
+                StopTimer(existingState);
+                StartTimer(guildId, existingState);
+                return;
+            }
+
+            if (_states.TryRemove(guildId, out var failedState))
+            {
+                StopTimer(failedState);
+            }
+        }
+        else if (_states.TryRemove(guildId, out var oldState))
+        {
+            StopTimer(oldState);
+            await TryDeleteMessageAsync(oldState, guildId);
+        }
 
         IUserMessage message;
         try
