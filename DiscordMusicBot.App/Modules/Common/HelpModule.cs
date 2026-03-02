@@ -42,6 +42,14 @@ public sealed class HelpModule : InteractionModuleBase
                 "`/fav rename <favorite> <new_name>` — Rename a favorite")
             .AddField("Search",
                 "`/search <query>` — Search YouTube and pick a track or playlist to enqueue")
+            .AddField("Playlists",
+                "`/playlist create <name>` — Create a new empty playlist\n" +
+                "`/playlist save <name>` — Save the current queue as a playlist\n" +
+                "`/playlist addtrack <playlist>` — Add the currently playing track to a playlist\n" +
+                "`/playlist list [page]` — Show your playlists\n" +
+                "`/playlist view <playlist> [page]` — View tracks in a playlist\n" +
+                "`/playlist rename <playlist> <new_name>` — Rename a playlist\n" +
+                "`/playlist delete <playlist>` — Delete a playlist")
             .AddField("History",
                 "`/history list [page]` — Show recently played tracks\n" +
                 "`/history play <track>` — Search and re-add a track from history to the queue")

@@ -76,7 +76,6 @@ public static class NowPlayingEmbedBuilder
         return new ComponentBuilder()
             .WithButton(pauseResumeLabel, "np:pause_resume", pauseResumeStyle, pauseResumeEmoji)
             .WithButton("Skip", "np:skip", ButtonStyle.Secondary, new Emoji("\u23ED\uFE0F"))
-            .WithButton("Fav", "np:favorite", ButtonStyle.Secondary, new Emoji("\u2764\uFE0F"))
             .WithButton("Shuffle", "np:shuffle", ButtonStyle.Secondary, new Emoji("\uD83D\uDD00"))
             .Build();
     }
@@ -87,7 +86,6 @@ public static class NowPlayingEmbedBuilder
             .WithButton("Pause", "np:pause_resume", ButtonStyle.Secondary, new Emoji("\u23F8\uFE0F"),
                 disabled: true)
             .WithButton("Skip", "np:skip", ButtonStyle.Secondary, new Emoji("\u23ED\uFE0F"), disabled: true)
-            .WithButton("Fav", "np:favorite", ButtonStyle.Secondary, new Emoji("\u2764\uFE0F"), disabled: true)
             .WithButton("Shuffle", "np:shuffle", ButtonStyle.Secondary, new Emoji("\uD83D\uDD00"), disabled: true)
             .Build();
     }

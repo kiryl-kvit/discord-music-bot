@@ -228,4 +228,51 @@ public sealed class PlaylistRepository(SqliteConnectionFactory connectionFactory
             .Replace("%", @"\%")
             .Replace("_", @"\_");
     }
+
+    public async Task AddItemAsync(long playlistId, PlaylistItem item,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO playlist_items (playlist_id, position, url, title, author, duration_ms, thumbnail_url)
+                VALUES (@PlaylistId,
+                        (SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_items WHERE playlist_id = @PlaylistId),
+                        @Url, @Title, @Author, @DurationMs, @ThumbnailUrl)
+                """,
+                new
+                {
+                    PlaylistId = playlistId,
+                    item.Url,
+                    item.Title,
+                    item.Author,
+                    item.DurationMs,
+                    item.ThumbnailUrl,
+                },
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE playlists
+                SET track_count = track_count + 1,
+                    total_duration_ms = CASE
+                        WHEN total_duration_ms IS NOT NULL AND @DurationMs IS NOT NULL
+                            THEN total_duration_ms + @DurationMs
+                        ELSE NULL
+                    END,
+                    updated_at = datetime('now')
+                WHERE id = @PlaylistId
+                """,
+                new { PlaylistId = playlistId, item.DurationMs },
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+        await transaction.CommitAsync(cancellationToken);
+    }
 }

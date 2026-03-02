@@ -9,4 +9,6 @@ public sealed class PlaylistsOptions
     public int ItemLimit { get; init; } = 200;
 
     public bool IsLimitReached(int count) => Limit > 0 && count >= Limit;
+
+    public bool IsItemLimitReached(int count) => ItemLimit > 0 && count >= ItemLimit;
 }

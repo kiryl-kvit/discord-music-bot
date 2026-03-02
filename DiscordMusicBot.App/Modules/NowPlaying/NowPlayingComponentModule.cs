@@ -2,7 +2,6 @@ using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordMusicBot.App.Services.Common;
-using DiscordMusicBot.App.Services.Favorites;
 using DiscordMusicBot.App.Services.Queue;
 using DiscordMusicBot.App.Services.Voice;
 
@@ -10,8 +9,7 @@ namespace DiscordMusicBot.App.Modules.NowPlaying;
 
 public sealed class NowPlayingComponentModule(
     QueuePlaybackService queuePlaybackService,
-    VoiceConnectionService voiceConnectionService,
-    FavoriteService favoriteService) : InteractionModuleBase
+    VoiceConnectionService voiceConnectionService) : InteractionModuleBase
 {
     [ComponentInteraction("np:pause_resume")]
     public async Task PauseResumeAsync()
@@ -65,40 +63,6 @@ public sealed class NowPlayingComponentModule(
         await DeferAsync();
 
         await queuePlaybackService.SkipAsync(guildId);
-    }
-
-    [ComponentInteraction("np:favorite")]
-    public async Task FavoriteAsync()
-    {
-        var guildId = Context.Guild.Id;
-        var userId = Context.User.Id;
-
-        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
-        if (currentItem is null)
-        {
-            await RespondAsync(
-                embed: ErrorEmbedBuilder.Build("Nothing playing", "There is no track to favorite."),
-                ephemeral: true);
-            return;
-        }
-
-        await DeferAsync(ephemeral: true);
-
-        var result = await favoriteService.AddAsync(
-            userId, currentItem.Url, currentItem.Title, alias: null, currentItem.Author,
-            currentItem.Duration, isPlaylist: false, currentItem.ThumbnailUrl);
-
-        if (!result.IsSuccess)
-        {
-            await FollowupAsync(
-                embed: ErrorEmbedBuilder.Build("Cannot Add Favorite", result.ErrorMessage!),
-                ephemeral: true);
-            return;
-        }
-
-        var embed = FavoriteEmbedBuilder.BuildAddedEmbed(result.Value!);
-
-        await FollowupAsync(embed: embed, ephemeral: true);
     }
 
     [ComponentInteraction("np:shuffle")]

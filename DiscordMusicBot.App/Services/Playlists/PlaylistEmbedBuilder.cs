@@ -26,6 +26,17 @@ public static class PlaylistEmbedBuilder
         return builder.Build();
     }
 
+    public static Embed BuildCreatedEmbed(Playlist playlist)
+    {
+        return new EmbedBuilder()
+            .WithTitle("Playlist Created")
+            .WithColor(Color.Purple)
+            .WithDescription(
+                $"**{playlist.Name}**\n" +
+                "Use `/playlist addtrack` to add tracks.")
+            .Build();
+    }
+
     public static Embed BuildListEmbed(IReadOnlyList<Playlist> items, int page, int pageSize, int totalCount)
     {
         var builder = new EmbedBuilder()
@@ -81,6 +92,21 @@ public static class PlaylistEmbedBuilder
             ? DateFormatter.FormatTime(TimeSpan.FromMilliseconds(item.DurationMs.Value))
             : DisplayConstants.UnknownDuration;
         return $"`{position}.` **{item.Title}** - {DisplayConstants.AuthorOrDefault(item.Author)} `[{duration}]`";
+    }
+
+    public static Embed BuildTrackAddedEmbed(Playlist playlist, PlaylistItem item)
+    {
+        var duration = item.DurationMs.HasValue
+            ? DateFormatter.FormatTime(TimeSpan.FromMilliseconds(item.DurationMs.Value))
+            : DisplayConstants.UnknownDuration;
+
+        return new EmbedBuilder()
+            .WithTitle("Track Added")
+            .WithColor(Color.Purple)
+            .WithDescription(
+                $"**{item.Title}** `[{duration}]`\n" +
+                $"Added to **{playlist.Name}**")
+            .Build();
     }
 
     public static Embed BuildDeletedEmbed(Playlist playlist)

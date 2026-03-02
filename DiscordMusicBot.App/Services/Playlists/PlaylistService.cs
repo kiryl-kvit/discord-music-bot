@@ -42,4 +42,20 @@ public sealed class PlaylistService(
 
         return Result<Playlist>.Success(playlist);
     }
+
+    public async Task<Result<Playlist>> AddItemAsync(Playlist playlist, PlaylistItem item)
+    {
+        var options = playlistsOptions.CurrentValue;
+
+        if (options.IsItemLimitReached(playlist.TrackCount))
+        {
+            return Result<Playlist>.Failure(
+                $"This playlist has reached the track limit ({options.ItemLimit}). " +
+                "Remove some tracks or create a new playlist.");
+        }
+
+        await playlistRepository.AddItemAsync(playlist.Id, item);
+
+        return Result<Playlist>.Success(playlist);
+    }
 }

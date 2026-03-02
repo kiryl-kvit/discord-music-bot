@@ -26,4 +26,6 @@ public interface IPlaylistRepository
         CancellationToken cancellationToken = default);
 
     Task<bool> ExistsByNameAsync(ulong userId, string name, CancellationToken cancellationToken = default);
+
+    Task AddItemAsync(long playlistId, PlaylistItem item, CancellationToken cancellationToken = default);
 }
