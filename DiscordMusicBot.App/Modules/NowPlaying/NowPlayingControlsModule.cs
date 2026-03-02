@@ -6,7 +6,6 @@ using DiscordMusicBot.App.Services.Favorites;
 using DiscordMusicBot.App.Services.NowPlaying;
 using DiscordMusicBot.App.Services.Queue;
 using DiscordMusicBot.App.Services.Voice;
-using DiscordMusicBot.Domain.Favorites;
 
 namespace DiscordMusicBot.App.Modules.NowPlaying;
 
@@ -14,7 +13,7 @@ public sealed class NowPlayingControlsModule(
     QueuePlaybackService queuePlaybackService,
     NowPlayingMessageService nowPlayingMessageService,
     VoiceConnectionService voiceConnectionService,
-    IFavoriteRepository favoriteRepository) : InteractionModuleBase
+    FavoriteService favoriteService) : InteractionModuleBase
 {
     [SlashCommand("now", "Show the currently playing track")]
     public async Task NowPlayingAsync()
@@ -109,23 +108,19 @@ public sealed class NowPlayingControlsModule(
             return;
         }
 
-        if (await favoriteRepository.ExistsByUrlAsync(userId, currentItem.Url))
+        var result = await favoriteService.AddAsync(
+            userId, currentItem.Url, currentItem.Title, alias: null, currentItem.Author,
+            currentItem.Duration, isPlaylist: false, currentItem.ThumbnailUrl);
+
+        if (!result.IsSuccess)
         {
             await RespondAsync(
-                embed: ErrorEmbedBuilder.Build("Already favorited",
-                    $"**{currentItem.Title}** is already in your favorites."),
+                embed: ErrorEmbedBuilder.Build("Cannot Add Favorite", result.ErrorMessage!),
                 ephemeral: true);
             return;
         }
 
-        var favoriteItem = FavoriteItem.Create(
-            userId, currentItem.Url, currentItem.Title, alias: null, currentItem.Author,
-            currentItem.Duration, isPlaylist: false, currentItem.ThumbnailUrl);
-
-        await favoriteRepository.AddAsync(favoriteItem);
-
-        var embed = FavoriteEmbedBuilder.BuildAddedEmbed(
-            currentItem.Title, currentItem.Author, currentItem.Duration);
+        var embed = FavoriteEmbedBuilder.BuildAddedEmbed(result.Value!);
 
         await RespondAsync(embed: embed, ephemeral: true);
     }

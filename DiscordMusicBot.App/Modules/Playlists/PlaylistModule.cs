@@ -13,6 +13,7 @@ namespace DiscordMusicBot.App.Modules.Playlists;
 public sealed class PlaylistModule(
     IPlaylistRepository playlistRepository,
     QueuePlaybackService queuePlaybackService,
+    PlaylistService playlistService,
     IOptionsMonitor<PlaylistsOptions> playlistsOptions,
     ILogger<PlaylistModule> logger) : InteractionModuleBase
 {
@@ -26,46 +27,8 @@ public sealed class PlaylistModule(
             userId, name, guildId);
         await DeferAsync(ephemeral: true);
 
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Invalid Name", "Playlist name cannot be empty.");
-            });
-            return;
-        }
-
-        var trimmedName = name.Trim();
-
-        var count = await playlistRepository.GetCountAsync(userId);
-        var options = playlistsOptions.CurrentValue;
-
-        if (options.IsLimitReached(count))
-        {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Playlist Limit Reached",
-                    $"You have reached the playlist limit ({options.Limit}).",
-                    "Delete some playlists before creating new ones.");
-            });
-            return;
-        }
-
-        if (await playlistRepository.ExistsByNameAsync(userId, trimmedName))
-        {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Duplicate Name",
-                    $"A playlist named **{trimmedName}** already exists.",
-                    "Choose a different name or delete the existing playlist first.");
-            });
-            return;
-        }
-
         var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        var options = playlistsOptions.CurrentValue;
         var itemLimit = options.ItemLimit > 0 ? options.ItemLimit : int.MaxValue;
         var queueTake = currentItem is not null ? itemLimit - 1 : itemLimit;
         var queueItems = await queuePlaybackService.GetQueueItemsAsync(guildId, skip: 0, take: queueTake);
@@ -114,13 +77,22 @@ public sealed class PlaylistModule(
             totalDurationMs = AccumulateDuration(totalDurationMs, durationMs);
         }
 
-        var playlist = Playlist.Create(userId, trimmedName, playlistItems.Count, totalDurationMs);
-        await playlistRepository.CreateAsync(playlist, playlistItems);
+        var result = await playlistService.CreateAsync(userId, name, playlistItems, totalDurationMs);
+
+        if (!result.IsSuccess)
+        {
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Cannot Save Playlist", result.ErrorMessage!);
+            });
+            return;
+        }
 
         logger.LogInformation("User {UserId} saved playlist {Name} with {TrackCount} tracks",
-            userId, trimmedName, playlistItems.Count);
+            userId, result.Value!.Name, playlistItems.Count);
 
-        var embed = PlaylistEmbedBuilder.BuildSavedEmbed(playlist);
+        var embed = PlaylistEmbedBuilder.BuildSavedEmbed(result.Value!);
         await ModifyOriginalResponseAsync(props =>
         {
             props.Content = null;

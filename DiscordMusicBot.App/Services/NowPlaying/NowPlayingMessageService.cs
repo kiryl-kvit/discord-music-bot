@@ -302,16 +302,19 @@ public sealed class NowPlayingMessageService(
                     continue;
                 }
 
-                await UpdateMessageAsync(guildId);
+                try
+                {
+                    await UpdateMessageAsync(guildId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Periodic now-playing update failed for guild {GuildId}", guildId);
+                }
             }
         }
         catch (OperationCanceledException)
         {
             // Expected on stop.
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Periodic now-playing update loop failed for guild {GuildId}", guildId);
         }
     }
 }

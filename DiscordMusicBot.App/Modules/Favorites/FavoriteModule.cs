@@ -1,5 +1,4 @@
 using Discord.Interactions;
-using DiscordMusicBot.App.Options;
 using DiscordMusicBot.App.Services.Common;
 using DiscordMusicBot.App.Services.Favorites;
 using DiscordMusicBot.Core.Constants;
@@ -7,7 +6,6 @@ using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
 using DiscordMusicBot.Domain.Favorites;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DiscordMusicBot.App.Modules.Favorites;
 
@@ -15,7 +13,7 @@ namespace DiscordMusicBot.App.Modules.Favorites;
 public sealed class FavoriteModule(
     IFavoriteRepository favoriteRepository,
     IUrlProcessorFactory urlProcessorFactory,
-    IOptionsMonitor<FavoritesOptions> favoritesOptions,
+    FavoriteService favoriteService,
     ILogger<FavoriteModule> logger) : InteractionModuleBase
 {
     [SlashCommand("add", "Add a track or playlist to your favorites")]
@@ -37,20 +35,6 @@ public sealed class FavoriteModule(
             return;
         }
 
-        var count = await favoriteRepository.GetCountAsync(userId);
-
-        if (favoritesOptions.CurrentValue.IsLimitReached(count))
-        {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Favorites Limit Reached",
-                    $"You have reached the favorites limit ({favoritesOptions.CurrentValue.Limit}).",
-                    "Remove some favorites before adding new ones.");
-            });
-            return;
-        }
-
         var normalizedUrl = UrlNormalizer.TryNormalize(url);
         if (normalizedUrl is null)
         {
@@ -58,16 +42,6 @@ public sealed class FavoriteModule(
             {
                 props.Content = null;
                 props.Embed = ErrorEmbedBuilder.Build("Invalid URL", "Could not process this URL.");
-            });
-            return;
-        }
-
-        if (await favoriteRepository.ExistsByUrlAsync(userId, normalizedUrl))
-        {
-            await ModifyOriginalResponseAsync(props =>
-            {
-                props.Content = null;
-                props.Embed = ErrorEmbedBuilder.Build("Duplicate", "This item is already in your favorites.");
             });
             return;
         }
@@ -93,16 +67,24 @@ public sealed class FavoriteModule(
         var storedUrl = isPlaylist ? normalizedUrl : representative.Url;
         var title = isPlaylist ? (musicResult.PlaylistName ?? representative.Title) : representative.Title;
 
-        var favoriteItem = FavoriteItem.Create(
+        var result = await favoriteService.AddAsync(
             userId, storedUrl, title, alias, representative.Author,
             isPlaylist ? null : representative.Duration, isPlaylist, representative.ThumbnailUrl);
 
-        await favoriteRepository.AddAsync(favoriteItem);
+        if (!result.IsSuccess)
+        {
+            await ModifyOriginalResponseAsync(props =>
+            {
+                props.Content = null;
+                props.Embed = ErrorEmbedBuilder.Build("Cannot Add Favorite", result.ErrorMessage!);
+            });
+            return;
+        }
 
         logger.LogInformation("User {UserId} added favorite: {Title} (playlist={IsPlaylist})",
             userId, title, isPlaylist);
 
-        var embed = FavoriteEmbedBuilder.BuildAddedEmbed(favoriteItem);
+        var embed = FavoriteEmbedBuilder.BuildAddedEmbed(result.Value!);
         await ModifyOriginalResponseAsync(props =>
         {
             props.Content = null;
