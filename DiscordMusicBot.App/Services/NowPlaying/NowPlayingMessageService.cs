@@ -14,8 +14,9 @@ public sealed class NowPlayingMessageService(
     IGuildSettingsRepository guildSettingsRepository,
     ILogger<NowPlayingMessageService> logger)
 {
-    private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan DebounceInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DebounceInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan SemaphoreTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ConcurrentDictionary<ulong, NowPlayingMessageState> _states = new();
 
@@ -26,18 +27,8 @@ public sealed class NowPlayingMessageService(
             return;
         }
 
-        var info = await BuildNowPlayingInfoAsync(guildId);
-        if (info is null)
+        if (await RequestUpdateAsync(guildId, msgState, priority: true))
         {
-            return;
-        }
-
-        var embed = NowPlayingEmbedBuilder.BuildEmbed(info);
-        var components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
-
-        if (await TryModifyMessageAsync(msgState, guildId, embed, components))
-        {
-            Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
             StopTimer(msgState);
             StartTimer(guildId, msgState);
         }
@@ -59,12 +50,22 @@ public sealed class NowPlayingMessageService(
 
     public async Task OnPlaybackPausedAsync(ulong guildId)
     {
-        await UpdateMessageAsync(guildId);
+        if (!_states.TryGetValue(guildId, out var msgState))
+        {
+            return;
+        }
+
+        await RequestUpdateAsync(guildId, msgState);
     }
 
     public async Task OnPlaybackResumedAsync(ulong guildId)
     {
-        await UpdateMessageAsync(guildId);
+        if (!_states.TryGetValue(guildId, out var msgState))
+        {
+            return;
+        }
+
+        await RequestUpdateAsync(guildId, msgState);
     }
 
     public async Task OnPlaybackStoppedAsync(ulong guildId)
@@ -159,48 +160,94 @@ public sealed class NowPlayingMessageService(
         return true;
     }
 
-    private async Task UpdateMessageAsync(ulong guildId)
+    private async Task<bool> RequestUpdateAsync(ulong guildId, NowPlayingMessageState msgState,
+        bool priority = false)
     {
-        if (!_states.TryGetValue(guildId, out var msgState))
+        if (!await msgState.EditSemaphore.WaitAsync(SemaphoreTimeout))
         {
-            return;
+            // Another update is in progress and taking too long; mark pending so the
+            // next timer tick picks it up.
+            msgState.PendingUpdate = true;
+            return true;
         }
 
-        var info = await BuildNowPlayingInfoAsync(guildId);
-        if (info is null)
+        try
         {
-            return;
-        }
+            // Debounce: skip if a recent edit was sent, unless this is a priority update
+            // or a previous update was deferred and needs flushing.
+            var ticksSinceLastEdit = DateTimeOffset.UtcNow.Ticks
+                                    - Interlocked.Read(ref msgState.LastEditUtcTicks);
 
-        var embed = NowPlayingEmbedBuilder.BuildEmbed(info);
-        var components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
-
-        if (!await TryModifyMessageAsync(msgState, guildId, embed, components))
-        {
-            if (_states.TryRemove(guildId, out var removed))
+            if (!priority && !msgState.PendingUpdate && ticksSinceLastEdit < DebounceInterval.Ticks)
             {
-                StopTimer(removed);
+                msgState.PendingUpdate = true;
+                return true;
             }
-        }
-        else
-        {
+
+            var info = await BuildNowPlayingInfoAsync(guildId);
+            if (info is null)
+            {
+                return true;
+            }
+
+            var embed = NowPlayingEmbedBuilder.BuildEmbed(info);
+            var components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
+
+            var contentHash = ComputeContentHash(embed);
+            if (!priority && contentHash == msgState.LastContentHash)
+            {
+                msgState.PendingUpdate = false;
+                return true;
+            }
+
+            if (!await TryModifyMessageAsync(msgState, guildId, embed, components))
+            {
+                return false;
+            }
+
             Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
+            msgState.LastContentHash = contentHash;
+            msgState.PendingUpdate = false;
+            return true;
         }
+        finally
+        {
+            msgState.EditSemaphore.Release();
+        }
+    }
+
+    private static string ComputeContentHash(Embed embed)
+    {
+        return $"{embed.Title}|{embed.Description}|{embed.Footer?.Text}|{embed.Thumbnail?.Url}";
     }
 
     private async Task UpdateToLoadingStateAsync(ulong guildId, NowPlayingMessageState msgState)
     {
-        if (DateTimeOffset.UtcNow.Ticks - Interlocked.Read(ref msgState.LastEditUtcTicks) < DebounceInterval.Ticks)
+        if (!await msgState.EditSemaphore.WaitAsync(SemaphoreTimeout))
         {
             return;
         }
 
-        var embed = NowPlayingEmbedBuilder.BuildLoadingEmbed();
-        var components = NowPlayingEmbedBuilder.BuildDisabledComponents();
-
-        if (await TryModifyMessageAsync(msgState, guildId, embed, components))
+        try
         {
-            Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
+            if (DateTimeOffset.UtcNow.Ticks - Interlocked.Read(ref msgState.LastEditUtcTicks)
+                < DebounceInterval.Ticks)
+            {
+                return;
+            }
+
+            var embed = NowPlayingEmbedBuilder.BuildLoadingEmbed();
+            var components = NowPlayingEmbedBuilder.BuildDisabledComponents();
+
+            if (await TryModifyMessageAsync(msgState, guildId, embed, components))
+            {
+                Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
+                msgState.LastContentHash = null;
+            }
+        }
+        finally
+        {
+            msgState.EditSemaphore.Release();
         }
     }
 
@@ -288,15 +335,22 @@ public sealed class NowPlayingMessageService(
             using var timer = new PeriodicTimer(UpdateInterval);
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                if (_states.TryGetValue(guildId, out var msgState)
-                    && DateTimeOffset.UtcNow.Ticks - Interlocked.Read(ref msgState.LastEditUtcTicks) < DebounceInterval.Ticks)
+                if (!_states.TryGetValue(guildId, out var msgState))
                 {
-                    continue;
+                    break;
                 }
 
                 try
                 {
-                    await UpdateMessageAsync(guildId);
+                    if (!await RequestUpdateAsync(guildId, msgState))
+                    {
+                        if (_states.TryRemove(guildId, out var removed))
+                        {
+                            StopTimer(removed);
+                        }
+
+                        break;
+                    }
                 }
                 catch (Exception ex)
                 {
