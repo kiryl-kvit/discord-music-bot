@@ -6,7 +6,7 @@ This app is NOT designed for high-demand multi-guild deployment. It is a simple 
 ## Features
 
 - **Favorites** -- save, list, rename, and remove favorite tracks per user
-- **Autoplay** -- when the queue ends, automatically plays related tracks from YouTube; toggle per server with `/queue autoplay`
+- **Autoplay** -- proactively fills the queue with related tracks from YouTube or Spotify when running low; configurable batch size (1–50, default 25) per server with `/queue autoplay [queue_size]`
 - **Playback history** -- browse recently played tracks per server and re-queue them with `/history play`
 - **State persistence** -- survives crashes and restarts by saving playback position, voice channel, and queue to a SQLite database, then auto-resuming where it left off
 - **Track prefetching** -- resolves the next track's audio stream while the current one is still playing for gapless transitions
