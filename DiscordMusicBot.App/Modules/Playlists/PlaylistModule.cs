@@ -17,6 +17,29 @@ public sealed class PlaylistModule(
     IOptionsMonitor<PlaylistsOptions> playlistsOptions,
     ILogger<PlaylistModule> logger) : InteractionModuleBase
 {
+    [SlashCommand("create", "Create a new empty playlist")]
+    public async Task CreateAsync(string name)
+    {
+        var userId = Context.User.Id;
+
+        logger.LogInformation("User {UserId} is creating playlist {Name}", userId, name);
+
+        var result = await playlistService.CreateAsync(userId, name, [], totalDurationMs: 0);
+
+        if (!result.IsSuccess)
+        {
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Cannot Create Playlist", result.ErrorMessage!),
+                ephemeral: true);
+            return;
+        }
+
+        logger.LogInformation("User {UserId} created playlist {Name}", userId, result.Value!.Name);
+
+        var embed = PlaylistEmbedBuilder.BuildCreatedEmbed(result.Value!);
+        await RespondAsync(embed: embed, ephemeral: true);
+    }
+
     [SlashCommand("save", "Save the current queue as a named playlist")]
     public async Task SaveAsync(string name)
     {
@@ -241,6 +264,66 @@ public sealed class PlaylistModule(
             userId, playlistId, oldName, playlist.Name);
 
         var embed = PlaylistEmbedBuilder.BuildRenamedEmbed(playlist, oldName);
+        await RespondAsync(embed: embed, ephemeral: true);
+    }
+
+    [SlashCommand("addtrack", "Add the currently playing track to a playlist")]
+    public async Task AddTrackAsync(
+        [Summary("playlist"), Autocomplete(typeof(PlaylistAutocompleteHandler))] string playlistIdStr)
+    {
+        var userId = Context.User.Id;
+        var guildId = Context.Guild.Id;
+
+        if (!long.TryParse(playlistIdStr, out var playlistId))
+        {
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Invalid Selection", "The playlist selection is invalid."),
+                ephemeral: true);
+            return;
+        }
+
+        var playlist = await playlistRepository.GetByIdAsync(playlistId);
+        if (playlist is null || playlist.UserId != userId)
+        {
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Not Found", "Playlist not found."),
+                ephemeral: true);
+            return;
+        }
+
+        var currentItem = queuePlaybackService.GetCurrentItem(guildId);
+        if (currentItem is null)
+        {
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Nothing Playing",
+                    "There is no track currently playing.",
+                    "Use `/queue add <url>` to add and play a track first."),
+                ephemeral: true);
+            return;
+        }
+
+        var durationMs = currentItem.Duration.HasValue
+            ? (long?)currentItem.Duration.Value.TotalMilliseconds
+            : null;
+
+        var playlistItem = PlaylistItem.Create(
+            playlist.TrackCount, currentItem.Url, currentItem.Title,
+            currentItem.Author, durationMs, currentItem.ThumbnailUrl);
+
+        var result = await playlistService.AddItemAsync(playlist, playlistItem);
+
+        if (!result.IsSuccess)
+        {
+            await RespondAsync(
+                embed: ErrorEmbedBuilder.Build("Cannot Add Track", result.ErrorMessage!),
+                ephemeral: true);
+            return;
+        }
+
+        logger.LogInformation("User {UserId} added track to playlist {PlaylistId}: {Title}",
+            userId, playlistId, currentItem.Title);
+
+        var embed = PlaylistEmbedBuilder.BuildTrackAddedEmbed(playlist, playlistItem);
         await RespondAsync(embed: embed, ephemeral: true);
     }
 
