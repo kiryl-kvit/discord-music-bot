@@ -15,7 +15,7 @@ public sealed class NowPlayingMessageService(
     ILogger<NowPlayingMessageService> logger)
 {
     private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan DebounceInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan DebounceInterval = TimeSpan.FromSeconds(1);
 
     private readonly ConcurrentDictionary<ulong, NowPlayingMessageState> _states = new();
 
