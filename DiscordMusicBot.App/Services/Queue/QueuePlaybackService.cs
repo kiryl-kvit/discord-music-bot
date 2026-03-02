@@ -211,7 +211,6 @@ public sealed partial class QueuePlaybackService(
 
         await PersistStateAsync(guildId, state, cancellationToken);
 
-        state.ClearPrefetchedTrack();
         await ClearActivityAsync(cancellationToken);
         await RaisePlaybackPausedAsync(guildId);
     }
@@ -414,7 +413,11 @@ public sealed partial class QueuePlaybackService(
                 logger.LogInformation("Now playing: '{Title}' by {Author} ({Duration}) in guild {GuildId}",
                     item.Title, item.Author ?? "Unknown", item.Duration, guildId);
 
-                state.ResetElapsedTime();
+                if (state.ResumeItemId != item.Id)
+                {
+                    state.ResetElapsedTime();
+                }
+
                 await SetActivityAsync(item.Title, pauseToken);
                 await RaiseTrackStartedAsync(guildId, item);
 
@@ -719,19 +722,40 @@ public sealed partial class QueuePlaybackService(
     private async Task<Result<PcmAudioStream>> AcquireOrUsePrefetchedStreamAsync(
         GuildPlaybackState state, PlayQueueItem item, TimeSpan startFrom, CancellationToken cancellationToken)
     {
+        ResolvedStream? resolved = null;
+
         if (state.PrefetchedTrack is { } prefetched && prefetched.ItemId == item.Id && startFrom == TimeSpan.Zero)
         {
-            var resolved = prefetched.ResolvedStream;
+            resolved = prefetched.ResolvedStream;
             state.ClearPrefetchedTrack();
 
             logger.LogInformation("Launching FFmpeg for prefetched '{Title}' in guild {GuildId}",
                 item.Title, item.GuildId);
+        }
+        else if (state.CurrentTrack is { } cached && cached.ItemId == item.Id)
+        {
+            resolved = cached.ResolvedStream;
 
-            return await LaunchAudioStreamAsync(item, resolved, TimeSpan.Zero, cancellationToken);
+            logger.LogInformation("Reusing cached stream for '{Title}' in guild {GuildId}",
+                item.Title, item.GuildId);
+        }
+
+        if (resolved is not null)
+        {
+            state.CurrentTrack = new PlaybackTrack { ItemId = item.Id, ResolvedStream = resolved };
+            return await LaunchAudioStreamAsync(item, resolved, startFrom, cancellationToken);
         }
 
         state.ClearPrefetchedTrack();
-        return await AcquireAudioStreamAsync(item, startFrom, cancellationToken);
+
+        var resolveResult = await ResolveAudioStreamAsync(item, cancellationToken);
+        if (!resolveResult.IsSuccess)
+        {
+            return Result<PcmAudioStream>.Failure(resolveResult.ErrorMessage!);
+        }
+
+        state.CurrentTrack = new PlaybackTrack { ItemId = item.Id, ResolvedStream = resolveResult.Value! };
+        return await LaunchAudioStreamAsync(item, resolveResult.Value!, startFrom, cancellationToken);
     }
 
     private async Task<Result<PcmAudioStream>> AcquireAudioStreamAsync(
