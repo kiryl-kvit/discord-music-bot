@@ -10,6 +10,13 @@ public sealed class GuildPlaybackState
 
     public volatile bool IsPlaying;
     public volatile bool IsConnected;
+    private int _autoplayFillInProgress;
+
+    public bool TryBeginAutoplayFill() =>
+        Interlocked.CompareExchange(ref _autoplayFillInProgress, 1, 0) == 0;
+
+    public void EndAutoplayFill() =>
+        Interlocked.Exchange(ref _autoplayFillInProgress, 0);
 
     public ulong? VoiceChannelId;
 

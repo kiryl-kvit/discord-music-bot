@@ -34,7 +34,7 @@ public sealed class HelpModule : InteractionModuleBase
                 "`/queue skip [count]` — Skip one or more tracks\n" +
                 "`/queue shuffle` — Shuffle the queue\n" +
                 "`/queue clear` — Clear all items from the queue\n" +
-                "`/queue autoplay` — Toggle autoplay (play related tracks when queue is empty)")
+                "`/queue autoplay [queue_size]` — Toggle autoplay (proactively fills the queue with related tracks from YouTube/Spotify)")
             .AddField("Favorites",
                 "`/fav add <url> [alias]` — Save a track or playlist\n" +
                 "`/fav list [page]` — Show your favorites\n" +

@@ -12,14 +12,19 @@ public sealed class YoutubeRelatedTrackProvider(
 {
     private const string MixPlaylistPrefix = "RD";
 
-    public async Task<MusicSource?> GetRelatedTrackAsync(string seedVideoUrl,
-        IReadOnlyList<string> excludeUrls, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MusicSource>> GetRelatedTracksAsync(string seedVideoUrl,
+        IReadOnlyList<string> excludeUrls, int count, CancellationToken cancellationToken = default)
     {
+        if (count <= 0)
+        {
+            return [];
+        }
+
         var videoId = VideoId.TryParse(seedVideoUrl);
         if (videoId is null)
         {
             logger.LogWarning("Cannot extract video ID from URL '{Url}' for autoplay", seedVideoUrl);
-            return null;
+            return [];
         }
 
         var mixPlaylistId = $"{MixPlaylistPrefix}{videoId.Value}";
@@ -27,6 +32,8 @@ public sealed class YoutubeRelatedTrackProvider(
 
         try
         {
+            var results = new List<MusicSource>();
+
             await foreach (var video in youtubeClient.Playlists.GetVideosAsync(mixPlaylistId, cancellationToken))
             {
                 var url = YoutubeHelpers.VideoUrl(video.Id);
@@ -42,17 +49,35 @@ public sealed class YoutubeRelatedTrackProvider(
                         .FirstOrDefault(t => t.Resolution.Width >= 120)?.Url ?? video.Thumbnails[0].Url
                     : null;
 
-                return new MusicSource(SourceType.YouTube, WebUtility.HtmlDecode(video.Title), url, WebUtility.HtmlDecode(video.Author.ChannelTitle), video.Duration, thumbnailUrl);
+                results.Add(new MusicSource(SourceType.YouTube, WebUtility.HtmlDecode(video.Title), url,
+                    WebUtility.HtmlDecode(video.Author.ChannelTitle), video.Duration, thumbnailUrl));
+
+                // Also exclude newly added tracks so the playlist iteration doesn't produce duplicates.
+                excludeSet.Add(url);
+
+                if (results.Count >= count)
+                {
+                    break;
+                }
             }
 
-            logger.LogInformation(
-                "No suitable related track found in mix playlist {MixId} (all excluded)", mixPlaylistId);
-            return null;
+            if (results.Count == 0)
+            {
+                logger.LogInformation(
+                    "No suitable related tracks found in mix playlist {MixId} (all excluded)", mixPlaylistId);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Found {Count} related tracks from mix playlist {MixId}", results.Count, mixPlaylistId);
+            }
+
+            return results;
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to fetch mix playlist {MixId} for autoplay", mixPlaylistId);
-            return null;
+            return [];
         }
     }
 }

@@ -180,24 +180,32 @@ public static class QueueEmbedBuilder
         return builder.Build();
     }
 
-    public static Embed BuildAutoplayEmbed(string title, string? author)
+    public static Embed BuildAutoplayDisabledEmbed()
     {
         return new EmbedBuilder()
             .WithTitle("Autoplay")
-            .WithColor(Color.Teal)
-            .WithDescription($"**{title}** - {DisplayConstants.AuthorOrDefault(author)}")
-            .WithFooter("Playing a related track because the queue is empty")
+            .WithColor(Color.LightGrey)
+            .WithDescription(
+                "Autoplay has been **disabled** because no compatible YouTube/Spotify tracks were found in history.")
             .Build();
     }
 
-    public static Embed BuildAutoplayToggledEmbed(bool enabled)
+    public static Embed BuildAutoplayToggledEmbed(bool enabled, int queueSize)
     {
-        return new EmbedBuilder()
+        var builder = new EmbedBuilder()
             .WithTitle("Autoplay")
-            .WithColor(enabled ? Color.Green : Color.LightGrey)
-            .WithDescription(enabled
-                ? "Autoplay is now **enabled**. Related tracks will play when the queue is empty."
-                : "Autoplay is now **disabled**.")
-            .Build();
+            .WithColor(enabled ? Color.Green : Color.LightGrey);
+
+        if (enabled)
+        {
+            builder.WithDescription(
+                $"Autoplay is now **enabled**. Up to **{queueSize}** related tracks will be queued automatically.");
+        }
+        else
+        {
+            builder.WithDescription("Autoplay is now **disabled**.");
+        }
+
+        return builder.Build();
     }
 }
