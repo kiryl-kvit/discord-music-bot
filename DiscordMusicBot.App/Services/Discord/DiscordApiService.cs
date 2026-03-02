@@ -7,8 +7,6 @@ namespace DiscordMusicBot.App.Services.Discord;
 
 public sealed class DiscordApiService(DiscordSocketClient discordClient, ILogger<DiscordApiService> logger)
 {
-    private const string VoiceChannelStatusPrefix = "\ud83c\udfb5 ";
-
     private readonly ConcurrentDictionary<ulong, string> _activeGuilds = new();
 
     public ulong BotUserId => discordClient.CurrentUser.Id;
@@ -88,7 +86,7 @@ public sealed class DiscordApiService(DiscordSocketClient discordClient, ILogger
                 return;
             }
 
-            var status = VoiceChannelStatusPrefix + trackTitle;
+            var status = trackTitle;
             if (status.Length > DiscordConfig.MaxVoiceChannelStatusLength)
             {
                 status = TruncateUnicodeSafe(status, DiscordConfig.MaxVoiceChannelStatusLength);

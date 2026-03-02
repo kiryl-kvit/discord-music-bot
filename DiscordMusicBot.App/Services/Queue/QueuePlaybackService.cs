@@ -866,9 +866,19 @@ public sealed partial class QueuePlaybackService(
         {
             logger.LogInformation("Resolving stream for '{Title}' in guild {GuildId}", nextItem.Title, guildId);
 
+            var versionBeforeResolve = state.PrefetchVersion;
+
             var resolveResult = await ResolveAudioStreamAsync(nextItem, cancellationToken);
             if (!resolveResult.IsSuccess)
             {
+                return;
+            }
+
+            if (state.PrefetchVersion != versionBeforeResolve)
+            {
+                logger.LogInformation(
+                    "Prefetch for '{Title}' in guild {GuildId} discarded (version changed during resolve)",
+                    nextItem.Title, guildId);
                 return;
             }
 

@@ -185,6 +185,16 @@ public sealed class PlayQueueRepository(SqliteConnectionFactory connectionFactor
             new CommandDefinition(
                 sb.ToString(), parameters, transaction: transaction, cancellationToken: cancellationToken));
 
+        if (excludeItemId.HasValue)
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "UPDATE play_queue_items SET position = 0 WHERE id = @Id",
+                    new { Id = excludeItemId.Value },
+                    transaction: transaction,
+                    cancellationToken: cancellationToken));
+        }
+
         await transaction.CommitAsync(cancellationToken);
     }
 

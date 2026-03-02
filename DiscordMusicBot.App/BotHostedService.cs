@@ -52,7 +52,7 @@ public sealed class BotHostedService(
     {
         logger.LogInformation("Bot is shutting down");
 
-        nowPlayingMessageService.StopAll();
+        await nowPlayingMessageService.StopAllAsync();
         await queuePlaybackService.GracefulStopAsync(cancellationToken);
         await voiceConnectionService.DisconnectAllAsync(cancellationToken);
         await discordClient.StopAsync();

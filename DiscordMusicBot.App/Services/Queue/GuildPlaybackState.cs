@@ -33,6 +33,7 @@ public sealed class GuildPlaybackState
 
     public PlaybackTrack? PrefetchedTrack;
     public PlaybackTrack? CurrentTrack;
+    private long _prefetchVersion;
 
     public IMessageChannel? FeedbackChannel;
 
@@ -58,7 +59,10 @@ public sealed class GuildPlaybackState
     public void ClearPrefetchedTrack()
     {
         PrefetchedTrack = null;
+        Interlocked.Increment(ref _prefetchVersion);
     }
+
+    public long PrefetchVersion => Interlocked.Read(ref _prefetchVersion);
 
     public void TriggerSkip()
     {
