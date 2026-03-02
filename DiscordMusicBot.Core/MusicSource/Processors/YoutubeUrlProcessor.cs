@@ -1,3 +1,4 @@
+using System.Net;
 using DiscordMusicBot.Core.Constants;
 using DiscordMusicBot.Core.MusicSource.Options;
 using DiscordMusicBot.Core.MusicSource.Processors.Abstraction;
@@ -66,7 +67,7 @@ public sealed class YoutubeUrlProcessor(
         try
         {
             var playlist = await youtubeClient.Playlists.GetAsync(playlistId, cancellationToken);
-            playlistName = playlist.Title;
+            playlistName = WebUtility.HtmlDecode(playlist.Title);
 
             await foreach (var video in youtubeClient.Playlists.GetVideosAsync(playlistId, cancellationToken))
             {
@@ -114,9 +115,10 @@ public sealed class YoutubeUrlProcessor(
     private static MusicSource ToMusicSource(IVideo video)
     {
         var url = YoutubeHelpers.VideoUrl(video.Id);
-        var author = video.Author?.ChannelTitle;
+        var title = WebUtility.HtmlDecode(video.Title);
+        var author = WebUtility.HtmlDecode(video.Author?.ChannelTitle);
         var thumbnailUrl = GetThumbnailUrl(video.Thumbnails);
-        return new MusicSource(SourceType.YouTube, video.Title, url, author, video.Duration, thumbnailUrl);
+        return new MusicSource(SourceType.YouTube, title, url, author, video.Duration, thumbnailUrl);
     }
 
     private static string? GetThumbnailUrl(IReadOnlyList<Thumbnail> thumbnails)

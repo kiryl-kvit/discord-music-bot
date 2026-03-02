@@ -1,3 +1,4 @@
+using System.Net;
 using DiscordMusicBot.Core.MusicSource.Youtube;
 using Microsoft.Extensions.Logging;
 using YoutubeExplode;
@@ -41,7 +42,7 @@ public sealed class YoutubeRelatedTrackProvider(
                         .FirstOrDefault(t => t.Resolution.Width >= 120)?.Url ?? video.Thumbnails[0].Url
                     : null;
 
-                return new MusicSource(SourceType.YouTube, video.Title, url, video.Author.ChannelTitle, video.Duration, thumbnailUrl);
+                return new MusicSource(SourceType.YouTube, WebUtility.HtmlDecode(video.Title), url, WebUtility.HtmlDecode(video.Author.ChannelTitle), video.Duration, thumbnailUrl);
             }
 
             logger.LogInformation(
