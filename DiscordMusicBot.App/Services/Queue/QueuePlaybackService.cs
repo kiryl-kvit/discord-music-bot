@@ -1,10 +1,10 @@
 using DiscordMusicBot.App.Services.Common;
+using DiscordMusicBot.App.Services.Discord;
 using DiscordMusicBot.App.Services.Voice;
 using System.Buffers;
 using System.Collections.Concurrent;
 using Discord;
 using Discord.Audio;
-using Discord.WebSocket;
 using DiscordMusicBot.Core;
 using DiscordMusicBot.Core.MusicSource;
 using DiscordMusicBot.Core.MusicSource.AudioStreaming;
@@ -26,7 +26,7 @@ public sealed partial class QueuePlaybackService(
     IHistoryRepository historyRepository,
     IGuildSettingsRepository guildSettingsRepository,
     IRelatedTrackProvider relatedTrackProvider,
-    DiscordSocketClient discordClient,
+    DiscordApiService discordApiService,
     ILogger<QueuePlaybackService> logger)
 {
     private const int PcmBufferSize = 81920; // ~0.85s of 48kHz 16-bit stereo PCM.
@@ -213,7 +213,7 @@ public sealed partial class QueuePlaybackService(
 
         await PersistStateAsync(guildId, state, cancellationToken);
 
-        await ClearActivityAsync(cancellationToken);
+        await discordApiService.ClearNowPlayingAsync(GetState(guildId).VoiceChannelId);
         await RaisePlaybackPausedAsync(guildId);
     }
 
@@ -230,7 +230,7 @@ public sealed partial class QueuePlaybackService(
 
         state.FullReset();
         await ClearPersistedStateAsync(guildId, cancellationToken);
-        await ClearActivityAsync(cancellationToken);
+        await discordApiService.ClearNowPlayingAsync(state.VoiceChannelId);
     }
 
     public async Task<SkipResult> SkipAsync(ulong guildId,
@@ -324,15 +324,7 @@ public sealed partial class QueuePlaybackService(
 
         try
         {
-            var guild = discordClient.GetGuild(guildId);
-            if (guild is null)
-            {
-                logger.LogWarning("Guild {GuildId} not found during restore; clearing persisted state", guildId);
-                await ClearPersistedStateAsync(guildId, cancellationToken);
-                return;
-            }
-
-            var voiceChannel = guild.GetVoiceChannel(saved.VoiceChannelId);
+            var voiceChannel = discordApiService.GetVoiceChannel(guildId, saved.VoiceChannelId);
             if (voiceChannel is null)
             {
                 logger.LogWarning(
@@ -357,7 +349,7 @@ public sealed partial class QueuePlaybackService(
 
             if (saved.FeedbackChannelId is { } feedbackId)
             {
-                state.FeedbackChannel = guild.GetTextChannel(feedbackId);
+                state.FeedbackChannel = discordApiService.GetTextChannel(guildId, feedbackId);
             }
 
             logger.LogInformation(
@@ -420,7 +412,7 @@ public sealed partial class QueuePlaybackService(
                     state.ResetElapsedTime();
                 }
 
-                await SetActivityAsync(item.Title, pauseToken);
+                await discordApiService.SetNowPlayingAsync(state.VoiceChannelId, item.Title);
                 await RaiseTrackStartedAsync(guildId, item);
 
                 if (item.Duration is { } d && d <= TimeSpan.Zero)
@@ -478,7 +470,7 @@ public sealed partial class QueuePlaybackService(
             logger.LogError(ex, "Unexpected error in queue advancement loop for guild {GuildId}", guildId);
             state.FullReset();
             await ClearPersistedStateAsync(guildId, CancellationToken.None);
-            await ClearActivityAsync(CancellationToken.None);
+            await discordApiService.ClearNowPlayingAsync(state.VoiceChannelId);
             await SendFeedbackAsync(guildId,
                 "Playback stopped unexpectedly",
                 "An unexpected error interrupted playback. Use `/queue resume` to restart.",
@@ -587,7 +579,7 @@ public sealed partial class QueuePlaybackService(
                 return AutoplayFillResult.Failed;
             }
 
-            var botUserId = discordClient.CurrentUser.Id;
+            var botUserId = discordApiService.BotUserId;
             var queueItems = relatedTracks.Select(track =>
                 PlayQueueItem.Create(guildId, botUserId, track.SourceType, track.Url, track.Title,
                     track.Author, track.Duration, track.ThumbnailUrl)).ToList();
@@ -934,30 +926,6 @@ public sealed partial class QueuePlaybackService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to clear persisted playback state for guild {GuildId}", guildId);
-        }
-    }
-
-    private async Task SetActivityAsync(string trackTitle, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await discordClient.SetActivityAsync(new Game(trackTitle, ActivityType.Listening));
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to set activity status");
-        }
-    }
-
-    private async Task ClearActivityAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await discordClient.SetActivityAsync(null);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to clear activity status");
         }
     }
 

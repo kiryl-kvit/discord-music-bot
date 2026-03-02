@@ -2,11 +2,12 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
+using DiscordMusicBot.App.Services.Discord;
 using Microsoft.Extensions.Logging;
 
 namespace DiscordMusicBot.App.Services.Voice;
 
-public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<VoiceConnectionService> logger)
+public sealed class VoiceConnectionService(DiscordApiService discordApiService, ILogger<VoiceConnectionService> logger)
 {
     private readonly ConcurrentDictionary<ulong, VoiceConnection> _connections = new();
 
@@ -147,7 +148,7 @@ public sealed class VoiceConnectionService(DiscordSocketClient client, ILogger<V
 
     public Task HandleVoiceStateUpdated(SocketUser user, SocketVoiceState before, SocketVoiceState after)
     {
-        return user.Id != client.CurrentUser.Id ? Task.CompletedTask : HandleBotVoiceStateUpdatedAsync(before, after);
+        return user.Id != discordApiService.BotUserId ? Task.CompletedTask : HandleBotVoiceStateUpdatedAsync(before, after);
     }
 
     private async Task HandleBotVoiceStateUpdatedAsync(SocketVoiceState before, SocketVoiceState after)
