@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
@@ -8,10 +9,13 @@ public sealed class DiscordApiService(DiscordSocketClient discordClient, ILogger
 {
     private const string VoiceChannelStatusPrefix = "\ud83c\udfb5 ";
 
+    private readonly ConcurrentDictionary<ulong, string> _activeGuilds = new();
+
     public ulong BotUserId => discordClient.CurrentUser.Id;
 
-    public async Task SetNowPlayingAsync(ulong? voiceChannelId, string trackTitle)
+    public async Task SetNowPlayingAsync(ulong guildId, ulong? voiceChannelId, string trackTitle)
     {
+        _activeGuilds[guildId] = trackTitle;
         await SetBotActivityAsync(trackTitle);
 
         if (voiceChannelId is { } channelId)
@@ -20,9 +24,19 @@ public sealed class DiscordApiService(DiscordSocketClient discordClient, ILogger
         }
     }
 
-    public async Task ClearNowPlayingAsync(ulong? voiceChannelId)
+    public async Task ClearNowPlayingAsync(ulong guildId, ulong? voiceChannelId)
     {
-        await ClearBotActivityAsync();
+        _activeGuilds.TryRemove(guildId, out _);
+
+        if (!_activeGuilds.IsEmpty)
+        {
+            var (_, otherTitle) = _activeGuilds.First();
+            await SetBotActivityAsync(otherTitle);
+        }
+        else
+        {
+            await ClearBotActivityAsync();
+        }
 
         if (voiceChannelId is { } channelId)
         {
@@ -77,7 +91,7 @@ public sealed class DiscordApiService(DiscordSocketClient discordClient, ILogger
             var status = VoiceChannelStatusPrefix + trackTitle;
             if (status.Length > DiscordConfig.MaxVoiceChannelStatusLength)
             {
-                status = status[..DiscordConfig.MaxVoiceChannelStatusLength];
+                status = TruncateUnicodeSafe(status, DiscordConfig.MaxVoiceChannelStatusLength);
             }
 
             await channel.SetStatusAsync(status);
@@ -104,5 +118,21 @@ public sealed class DiscordApiService(DiscordSocketClient discordClient, ILogger
         {
             logger.LogWarning(ex, "Failed to clear voice channel status for channel {ChannelId}", channelId);
         }
+    }
+
+    private static string TruncateUnicodeSafe(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        var end = maxLength;
+        if (end > 0 && char.IsHighSurrogate(value[end - 1]))
+        {
+            end--;
+        }
+
+        return value[..end];
     }
 }

@@ -213,7 +213,7 @@ public sealed partial class QueuePlaybackService(
 
         await PersistStateAsync(guildId, state, cancellationToken);
 
-        await discordApiService.ClearNowPlayingAsync(GetState(guildId).VoiceChannelId);
+        await discordApiService.ClearNowPlayingAsync(guildId, GetState(guildId).VoiceChannelId);
         await RaisePlaybackPausedAsync(guildId);
     }
 
@@ -230,7 +230,7 @@ public sealed partial class QueuePlaybackService(
 
         state.FullReset();
         await ClearPersistedStateAsync(guildId, cancellationToken);
-        await discordApiService.ClearNowPlayingAsync(state.VoiceChannelId);
+        await discordApiService.ClearNowPlayingAsync(guildId, state.VoiceChannelId);
     }
 
     public async Task<SkipResult> SkipAsync(ulong guildId,
@@ -412,7 +412,7 @@ public sealed partial class QueuePlaybackService(
                     state.ResetElapsedTime();
                 }
 
-                await discordApiService.SetNowPlayingAsync(state.VoiceChannelId, item.Title);
+                await discordApiService.SetNowPlayingAsync(guildId, state.VoiceChannelId, item.Title);
                 await RaiseTrackStartedAsync(guildId, item);
 
                 if (item.Duration is { } d && d <= TimeSpan.Zero)
@@ -470,7 +470,7 @@ public sealed partial class QueuePlaybackService(
             logger.LogError(ex, "Unexpected error in queue advancement loop for guild {GuildId}", guildId);
             state.FullReset();
             await ClearPersistedStateAsync(guildId, CancellationToken.None);
-            await discordApiService.ClearNowPlayingAsync(state.VoiceChannelId);
+            await discordApiService.ClearNowPlayingAsync(guildId, state.VoiceChannelId);
             await SendFeedbackAsync(guildId,
                 "Playback stopped unexpectedly",
                 "An unexpected error interrupted playback. Use `/queue resume` to restart.",
