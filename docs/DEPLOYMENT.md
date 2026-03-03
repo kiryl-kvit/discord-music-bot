@@ -63,7 +63,7 @@ Open the printed URL in a browser, log in with a Spotify account, and grant acce
 
 > **Running on a remote server?** The callback listener binds to `127.0.0.1:5543` on the machine running the bot. Forward the port over SSH before opening the authorization URL in your local browser:
 > ```
-> ssh -L 5543:127.0.0.1:5543 user@your-server
+> ssh -N -L 5543:127.0.0.1:5543 user@your-server
 > ```
 > With the tunnel open, Spotify will redirect your browser to `http://127.0.0.1:5543/callback` and the bot will receive it through the tunnel. The bot also prints this command as a reminder in its log output during the authorization flow.
 
