@@ -10,6 +10,19 @@ public sealed class SpotifyClientProvider(IOptionsMonitor<SpotifyOptions> option
     private SpotifyClient? _client;
     private string? _currentClientId;
     private string? _currentClientSecret;
+    private string? _currentRefreshToken;
+
+    public void SetRefreshToken(string refreshToken)
+    {
+        lock (_lock)
+        {
+            if (string.Equals(_currentRefreshToken, refreshToken, StringComparison.Ordinal))
+                return;
+
+            _currentRefreshToken = refreshToken;
+            _client = null;
+        }
+    }
 
     public SpotifyClient GetClient()
     {
@@ -24,9 +37,26 @@ public sealed class SpotifyClientProvider(IOptionsMonitor<SpotifyOptions> option
                 return _client;
             }
 
-            var config = SpotifyClientConfig
-                .CreateDefault()
-                .WithAuthenticator(new ClientCredentialsAuthenticator(opts.ClientId, opts.ClientSecret));
+            SpotifyClientConfig config;
+
+            if (!string.IsNullOrEmpty(_currentRefreshToken))
+            {
+                var initialResponse = new AuthorizationCodeTokenResponse
+                {
+                    RefreshToken = _currentRefreshToken
+                };
+
+                config = SpotifyClientConfig
+                    .CreateDefault()
+                    .WithAuthenticator(
+                        new AuthorizationCodeAuthenticator(opts.ClientId, opts.ClientSecret, initialResponse));
+            }
+            else
+            {
+                config = SpotifyClientConfig
+                    .CreateDefault()
+                    .WithAuthenticator(new ClientCredentialsAuthenticator(opts.ClientId, opts.ClientSecret));
+            }
 
             _client = new SpotifyClient(config);
             _currentClientId = opts.ClientId;

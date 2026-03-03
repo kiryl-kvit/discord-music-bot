@@ -81,20 +81,21 @@ public sealed partial class SpotifyUrlProcessor(
 
             var spotifyTracks = new List<SpotifyTrack>();
             var playlist = await client.Playlists.Get(playlistId, cancellationToken);
+            var playlistItems = await client.Playlists.GetPlaylistItems(playlistId, cancellationToken);
 
-            if (playlist.Items is null)
+            if (playlistItems.Items is null || playlistItems.Items.Count == 0)
             {
                 return Result<MusicSourceResult>.Failure("Spotify playlist is empty or inaccessible.");
             }
 
-            await foreach (var item in client.Paginate(playlist.Items, cancel: cancellationToken))
+            await foreach (var item in client.Paginate(playlistItems, cancel: cancellationToken))
             {
                 if (options.CurrentValue.IsPlaylistLimitReached(spotifyTracks.Count))
                 {
                     break;
                 }
 
-                if (item.Track is FullTrack track)
+                if (item.Item is FullTrack track)
                 {
                     spotifyTracks.Add(SpotifyTrack.FromFullTrack(track));
                 }
@@ -117,7 +118,7 @@ public sealed partial class SpotifyUrlProcessor(
             var client = spotifyClientProvider.GetClient();
 
             var album = await client.Albums.Get(albumId, cancellationToken);
-            var albumImageUrl = album.Images?.FirstOrDefault()?.Url;
+            var albumImageUrl = album.Images.FirstOrDefault()?.Url;
 
             var spotifyTracks = new List<SpotifyTrack>();
 

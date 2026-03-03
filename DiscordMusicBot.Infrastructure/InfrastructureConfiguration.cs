@@ -4,6 +4,7 @@ using DiscordMusicBot.Domain.Playback;
 using DiscordMusicBot.Domain.Playlists;
 using DiscordMusicBot.Domain.PlayQueue;
 using DiscordMusicBot.Domain.Settings;
+using DiscordMusicBot.Domain.Spotify;
 using DiscordMusicBot.Infrastructure.Database;
 using DiscordMusicBot.Infrastructure.Options;
 using DiscordMusicBot.Infrastructure.Repositories;
@@ -35,6 +36,7 @@ public static class InfrastructureConfiguration
         services.AddSingleton<IPlaylistRepository, PlaylistRepository>();
         services.AddSingleton<IHistoryRepository, HistoryRepository>();
         services.AddSingleton<IGuildSettingsRepository, GuildSettingsRepository>();
+        services.AddSingleton<ISpotifyAuthRepository, SpotifyAuthRepository>();
 
         return services;
     }

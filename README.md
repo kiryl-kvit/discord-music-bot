@@ -18,7 +18,7 @@ This app is NOT designed for high-demand multi-guild deployment. It is a simple 
 |---------------|---------------------------|----------------------------------------------|
 | YouTube       | Single videos, playlists  | Built-in, no configuration needed            |
 | YouTube Music | Single videos, playlists  | Built-in, no configuration needed            |
-| Spotify       | Tracks, playlists, albums | Requires `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` ([details](docs/DEPLOYMENT.md#5-configure-spotify-optional)) |
+| Spotify       | Tracks, playlists, albums | Requires `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` plus a one-time browser login ([details](docs/DEPLOYMENT.md#5-configure-spotify-optional)) |
 | Suno          | Songs, playlists          | Requires `SUNO_ENABLED=true` ([details](docs/DEPLOYMENT.md#6-configure-suno-optional)) |
 
 Spotify resolves tracks to YouTube for audio playback. Suno streams audio directly from its CDN.
