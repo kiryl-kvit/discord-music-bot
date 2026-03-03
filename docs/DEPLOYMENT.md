@@ -127,6 +127,6 @@ volumes:
 docker compose up -d
 ```
 
-> **Spotify first-run:** port 5543 must be reachable for the one-time OAuth callback. The Compose file uses `network_mode: host` so the port is already on the host — use the SSH tunnel approach from section 5.3 to reach it from your local browser. The `docker run` examples include `-p 5543:5543` for the same reason. Either way, run the container in the foreground the first time so the authorization URL is visible in the logs. Once the token is stored in the database the port is no longer used.
+> **Spotify first-run:** all Docker examples use `--network host` / `network_mode: host`, so the bot's callback listener on `127.0.0.1:5543` is directly on the host's loopback interface. Use the SSH tunnel approach from section 5.3 to reach it from your local browser. Run the container in the foreground the first time so the authorization URL is visible in the logs. Once the token is stored in the database the port is no longer used.
 
 See the [environment variables reference](../README.md#environment-variables) for all `.env` options.
