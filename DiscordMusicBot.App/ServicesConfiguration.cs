@@ -170,6 +170,7 @@ public static class ServicesConfiguration
 
             services.AddSingleton<SpotifyClientProvider>();
             services.AddKeyedScoped<IUrlProcessor, SpotifyUrlProcessor>(SourceType.Spotify);
+            services.AddHostedService<SpotifyAuthorizationService>();
 
             return services;
         }
