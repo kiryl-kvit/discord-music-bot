@@ -95,14 +95,14 @@ In Docker, the database defaults to `/app/data/database.db`. Mount a volume to `
 
 ```bash
 docker build -t discord-music-bot .
-docker run -d -p 5543:5543 --env-file .env discord-music-bot
+docker run -d --network host --env-file .env discord-music-bot
 ```
 
 ### Pull from GitHub Container Registry
 
 ```bash
 docker pull ghcr.io/kiryl-kvit/discord-music-bot:latest
-docker run -d -p 5543:5543 --env-file .env ghcr.io/kiryl-kvit/discord-music-bot:latest
+docker run -d --network host --env-file .env ghcr.io/kiryl-kvit/discord-music-bot:latest
 ```
 
 ### Docker Compose
