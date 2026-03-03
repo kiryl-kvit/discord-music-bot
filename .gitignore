@@ -27,3 +27,6 @@ bld/
 *.db-wal
 *.sqlite
 *.sqlite3
+
+# Native libraries
+libdave.so

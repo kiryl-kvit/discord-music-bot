@@ -19,6 +19,7 @@
     <ItemGroup>
         <None Include=".env" CopyToOutputDirectory="PreserveNewest" Condition="Exists('.env')" />
         <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="libdave.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('libdave.so')" />
     </ItemGroup>
 
     <ItemGroup>

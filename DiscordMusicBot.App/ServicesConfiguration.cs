@@ -103,6 +103,11 @@ public static class ServicesConfiguration
 
                 client.Log += Logging.CreateLogHandler(logger);
 
+                Discord.LibDave.Dave.SetLogSink((severity, filePath, lineNumber, message) =>
+                {
+                    logger.LogDebug("[libdave {File}:{Line}] {Message}", filePath, lineNumber, message);
+                });
+
                 return client;
             });
 
