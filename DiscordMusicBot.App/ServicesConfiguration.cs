@@ -92,6 +92,7 @@ public static class ServicesConfiguration
                 GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.GuildVoiceStates |
                                  GatewayIntents.Guilds,
                 LogLevel = LogSeverity.Info,
+                EnableVoiceDaveEncryption = true,
             };
 
             services.AddSingleton(socketConfig);
