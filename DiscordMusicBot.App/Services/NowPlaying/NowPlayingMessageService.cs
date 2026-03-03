@@ -15,7 +15,7 @@ public sealed class NowPlayingMessageService(
     ILogger<NowPlayingMessageService> logger)
 {
     private static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan DebounceInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan DebounceInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan SemaphoreTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ConcurrentDictionary<ulong, NowPlayingMessageState> _states = new();
@@ -26,6 +26,8 @@ public sealed class NowPlayingMessageService(
         {
             return;
         }
+
+        msgState.IsLoading = false;
 
         if (await RequestUpdateAsync(guildId, msgState, priority: true))
         {
@@ -38,14 +40,15 @@ public sealed class NowPlayingMessageService(
         }
     }
 
-    public async Task OnTrackLoadingAsync(ulong guildId)
+    public Task OnTrackLoadingAsync(ulong guildId)
     {
-        if (!_states.TryGetValue(guildId, out var msgState))
+        if (_states.TryGetValue(guildId, out var msgState))
         {
-            return;
+            msgState.IsLoading = true;
+            msgState.PendingUpdate = true;
         }
 
-        await UpdateToLoadingStateAsync(guildId, msgState);
+        return Task.CompletedTask;
     }
 
     public async Task OnPlaybackPausedAsync(ulong guildId)
@@ -185,13 +188,25 @@ public sealed class NowPlayingMessageService(
             }
 
             var info = await BuildNowPlayingInfoAsync(guildId);
-            if (info is null)
+
+            Embed embed;
+            MessageComponent components;
+
+            if (info is not null)
+            {
+                msgState.IsLoading = false;
+                embed = NowPlayingEmbedBuilder.BuildEmbed(info);
+                components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
+            }
+            else if (msgState.IsLoading)
+            {
+                embed = NowPlayingEmbedBuilder.BuildLoadingEmbed();
+                components = NowPlayingEmbedBuilder.BuildDisabledComponents();
+            }
+            else
             {
                 return true;
             }
-
-            var embed = NowPlayingEmbedBuilder.BuildEmbed(info);
-            var components = NowPlayingEmbedBuilder.BuildComponents(info.IsPaused);
 
             var contentHash = ComputeContentHash(embed);
             if (!priority && contentHash == msgState.LastContentHash)
@@ -221,7 +236,7 @@ public sealed class NowPlayingMessageService(
         return $"{embed.Title}|{embed.Description}|{embed.Footer?.Text}|{embed.Thumbnail?.Url}";
     }
 
-    private async Task UpdateToLoadingStateAsync(ulong guildId, NowPlayingMessageState msgState)
+    private async Task UpdateToStoppedStateAsync(ulong guildId, NowPlayingMessageState msgState)
     {
         if (!await msgState.EditSemaphore.WaitAsync(SemaphoreTimeout))
         {
@@ -230,33 +245,15 @@ public sealed class NowPlayingMessageService(
 
         try
         {
-            if (DateTimeOffset.UtcNow.Ticks - Interlocked.Read(ref msgState.LastEditUtcTicks)
-                < DebounceInterval.Ticks)
-            {
-                return;
-            }
-
-            var embed = NowPlayingEmbedBuilder.BuildLoadingEmbed();
+            var embed = NowPlayingEmbedBuilder.BuildStoppedEmbed();
             var components = NowPlayingEmbedBuilder.BuildDisabledComponents();
 
-            if (await TryModifyMessageAsync(msgState, guildId, embed, components))
-            {
-                Interlocked.Exchange(ref msgState.LastEditUtcTicks, DateTimeOffset.UtcNow.Ticks);
-                msgState.LastContentHash = null;
-            }
+            await TryModifyMessageAsync(msgState, guildId, embed, components);
         }
         finally
         {
             msgState.EditSemaphore.Release();
         }
-    }
-
-    private async Task UpdateToStoppedStateAsync(ulong guildId, NowPlayingMessageState msgState)
-    {
-        var embed = NowPlayingEmbedBuilder.BuildStoppedEmbed();
-        var components = NowPlayingEmbedBuilder.BuildDisabledComponents();
-
-        await TryModifyMessageAsync(msgState, guildId, embed, components);
     }
 
     private async Task<bool> TryModifyMessageAsync(NowPlayingMessageState msgState, ulong guildId,
