@@ -22,12 +22,17 @@ WORKDIR /app
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 ENV DATABASE_PATH=/app/data/database.db
 
-RUN apk add --no-cache icu-libs ffmpeg opus libsodium
+RUN apk add --no-cache icu-libs ffmpeg opus libsodium gcompat libstdc++
 
 COPY --from=build /app/publish .
 
 RUN ln -s /usr/lib/libopus.so.0 libopus.so && \
     ln -s /usr/lib/libsodium.so.26 libsodium.so
+
+ADD https://github.com/discord/libdave/releases/download/v1.1.1/cpp/libdave-Linux-X64-boringssl.zip /tmp/libdave.zip
+RUN unzip -q /tmp/libdave.zip lib/libdave.so -d /tmp/libdave && \
+    cp /tmp/libdave/lib/libdave.so . && \
+    rm -rf /tmp/libdave /tmp/libdave.zip
 
 VOLUME /app/data
 

@@ -92,6 +92,7 @@ public static class ServicesConfiguration
                 GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.GuildVoiceStates |
                                  GatewayIntents.Guilds,
                 LogLevel = LogSeverity.Info,
+                EnableVoiceDaveEncryption = true,
             };
 
             services.AddSingleton(socketConfig);
@@ -101,6 +102,11 @@ public static class ServicesConfiguration
                 var client = new DiscordSocketClient(socketConfig);
 
                 client.Log += Logging.CreateLogHandler(logger);
+
+                Discord.LibDave.Dave.SetLogSink((severity, filePath, lineNumber, message) =>
+                {
+                    logger.LogDebug("[libdave {File}:{Line}] {Message}", filePath, lineNumber, message);
+                });
 
                 return client;
             });
