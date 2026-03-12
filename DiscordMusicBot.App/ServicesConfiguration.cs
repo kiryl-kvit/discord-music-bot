@@ -105,7 +105,13 @@ public static class ServicesConfiguration
 
                 Discord.LibDave.Dave.SetLogSink((severity, filePath, lineNumber, message) =>
                 {
-                    logger.LogDebug("[libdave {File}:{Line}] {Message}", filePath, lineNumber, message);
+                    var logLevel = severity switch
+                    {
+                        Discord.LibDave.Binding.LoggingSeverity.Error => LogLevel.Error,
+                        Discord.LibDave.Binding.LoggingSeverity.Warning => LogLevel.Warning,
+                        _ => LogLevel.Debug,
+                    };
+                    logger.Log(logLevel, "[libdave {File}:{Line}] {Message}", filePath, lineNumber, message);
                 });
 
                 return client;

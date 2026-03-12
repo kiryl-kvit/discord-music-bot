@@ -9,6 +9,16 @@ public static class Logging
     {
         return logMessage =>
         {
+            // The bot connects self-deafened and never reads incoming audio.
+            // Discord.Net still receives some voice packets before the server
+            // acknowledges the deafen, producing noisy decrypt-failure warnings.
+            // Suppress them entirely — they are not actionable.
+            if (logMessage.Message is not null
+                && logMessage.Message.Contains("Failed to decrypt audio packet", StringComparison.Ordinal))
+            {
+                return Task.CompletedTask;
+            }
+
             const string message = "[{Source}] {Message}";
             switch (logMessage.Severity)
             {

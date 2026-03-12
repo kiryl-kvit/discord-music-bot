@@ -203,7 +203,8 @@ public sealed partial class QueuePlaybackService(
         state.PlaybackStartOffset = state.GetElapsedTime();
         state.PlaybackStartedUtc = null;
 
-        state.CancelPlayback();
+        state.CancelPlayback(ex =>
+            logger.LogWarning(ex, "Failed to dispose Discord PCM stream during pause in guild {GuildId}", guildId));
 
         if (state.PlaybackLoopTask is { } loopTask)
         {
@@ -668,19 +669,39 @@ public sealed partial class QueuePlaybackService(
         _ = PrefetchTrackAsync(guildId, pauseToken);
         _ = TryProactiveAutoplayFillAsync(guildId, state.CurrentItem, pauseToken);
 
-        var discordStream = state.DiscordPcmStream;
-        if (discordStream is null || state.DiscordPcmStreamOwner != audioClient)
+        // Always create a fresh Discord PCM stream for each track.
+        // Reusing a stream across tracks can leave stale RTP sequence/timing
+        // state and — when DAVE E2EE is enabled — an invalid key ratchet,
+        // causing subsequent writes to be silently dropped by Discord's voice
+        // server (no exception, just no audible audio).
+        var previousStream = state.DiscordPcmStream;
+        if (previousStream is not null)
         {
-            if (discordStream is not null)
+            state.DiscordPcmStream = null;
+            state.DiscordPcmStreamOwner = null;
+
+            try
             {
-                await discordStream.FlushAsync(CancellationToken.None);
-                await discordStream.DisposeAsync();
+                await previousStream.FlushAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to flush previous Discord PCM stream in guild {GuildId}", guildId);
             }
 
-            discordStream = audioClient.CreatePCMStream(AudioApplication.Music);
-            state.DiscordPcmStream = discordStream;
-            state.DiscordPcmStreamOwner = audioClient;
+            try
+            {
+                await previousStream.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to dispose previous Discord PCM stream in guild {GuildId}", guildId);
+            }
         }
+
+        var discordStream = audioClient.CreatePCMStream(AudioApplication.Music);
+        state.DiscordPcmStream = discordStream;
+        state.DiscordPcmStreamOwner = audioClient;
 
         try
         {
@@ -704,6 +725,19 @@ public sealed partial class QueuePlaybackService(
                         if (read == 0)
                             break;
                         preBuffered += read;
+                    }
+
+                    if (preBuffered == 0)
+                    {
+                        logger.LogWarning(
+                            "FFmpeg produced no audio data for '{Title}' in guild {GuildId}. " +
+                            "The source may be unavailable or the stream URL may have expired.",
+                            item.Title, guildId);
+                        await SendFeedbackAsync(guildId,
+                            $"Failed to stream '{item.Title}'",
+                            "No audio data was received. The source may be unavailable.",
+                            pauseToken);
+                        return;
                     }
 
                     // Write the pre-buffered data to Discord in chunks.
@@ -749,7 +783,8 @@ public sealed partial class QueuePlaybackService(
         {
             logger.LogWarning(ex, "Error streaming audio for '{Title}' in guild {GuildId}. " +
                                   "Resetting Discord PCM stream.", item.Title, guildId);
-            state.ResetDiscordStream(discordStream);
+            state.ResetDiscordStream(discordStream, ex =>
+                logger.LogWarning(ex, "Failed to dispose Discord PCM stream after error in guild {GuildId}", guildId));
             throw;
         }
 

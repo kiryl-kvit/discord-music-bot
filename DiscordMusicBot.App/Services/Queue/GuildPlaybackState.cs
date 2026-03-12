@@ -77,7 +77,7 @@ public sealed class GuildPlaybackState
         }
     }
 
-    public void CancelPlayback()
+    public void CancelPlayback(Action<Exception>? onStreamDisposeError = null)
     {
         IsPlaying = false;
 
@@ -86,7 +86,7 @@ public sealed class GuildPlaybackState
             var discordPcmStream = DiscordPcmStream;
             DiscordPcmStream = null;
             DiscordPcmStreamOwner = null;
-            _ = DisposeDiscordPcmStreamAsync(discordPcmStream);
+            _ = DisposeDiscordPcmStreamAsync(discordPcmStream, onStreamDisposeError);
         }
 
         SafeCancelAndDispose(ref PauseCts);
@@ -110,11 +110,11 @@ public sealed class GuildPlaybackState
         PlaybackStartOffset = TimeSpan.Zero;
     }
 
-    public void ResetDiscordStream(AudioOutStream failedStream)
+    public void ResetDiscordStream(AudioOutStream failedStream, Action<Exception>? onError = null)
     {
         DiscordPcmStream = null;
         DiscordPcmStreamOwner = null;
-        _ = DisposeDiscordPcmStreamAsync(failedStream);
+        _ = DisposeDiscordPcmStreamAsync(failedStream, onError);
     }
 
     private static void SafeCancelAndDispose(ref CancellationTokenSource? cts)
@@ -135,16 +135,17 @@ public sealed class GuildPlaybackState
         }
     }
 
-    private static async Task DisposeDiscordPcmStreamAsync(AudioOutStream stream)
+    private static async Task DisposeDiscordPcmStreamAsync(AudioOutStream stream,
+        Action<Exception>? onError = null)
     {
         try
         {
             await stream.FlushAsync(CancellationToken.None);
             await stream.DisposeAsync();
         }
-        catch
+        catch (Exception ex)
         {
-            //
+            onError?.Invoke(ex);
         }
     }
 }
